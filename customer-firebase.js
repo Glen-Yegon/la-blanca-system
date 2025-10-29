@@ -45,6 +45,30 @@ function generateCustomerId(plate) {
 // FIRESTORE FUNCTIONS
 // ==============================
 
+// Load staff names into the dropdown
+async function loadStaffNames() {
+  const staffSelect = document.getElementById("assignTo");
+  staffSelect.innerHTML = `<option value="">-- Select Staff (optional) --</option>`;
+
+  try {
+    const querySnapshot = await getDocs(collection(db, "users"));
+    querySnapshot.forEach((doc) => {
+      const data = doc.data();
+      if (data.role === "staff" || data.name) {
+        const option = document.createElement("option");
+        option.value = data.name;
+        option.textContent = data.name;
+        staffSelect.appendChild(option);
+      }
+    });
+  } catch (error) {
+    console.error("❌ Error loading staff names:", error);
+  }
+}
+
+// Run on page load
+window.addEventListener("DOMContentLoaded", loadStaffNames);
+
 // Save a new job
 export async function saveJob(job) {
   try {

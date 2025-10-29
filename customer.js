@@ -136,18 +136,29 @@ customerForm.addEventListener("submit", async (ev) => {
 
   // create a job object
   const jobId = `job_${Date.now()}`;
-  const job = {
-    id: jobId,
-    plate,
-    model,
-    color,
-    phone,
-    payment,
-    services: selectedServices,
-    total,
-    status: "Pending",
-    createdAt: new Date().toISOString(),
-  };
+const assignTo = document.getElementById("assignTo").value.trim();
+
+const job = {
+  id: jobId,
+  plate,
+  model,
+  color,
+  phone,
+  payment,
+  services: selectedServices,
+  total,
+  createdAt: new Date().toISOString(),
+};
+
+// ✅ If a staff is assigned, mark as In Progress immediately
+if (assignTo) {
+  job.status = "In Progress";
+  job.assignedTo = assignTo;
+  job.startedAt = new Date().toISOString();
+} else {
+  job.status = "Pending";
+}
+
 
   try {
     // ✅ Save to Firestore
@@ -271,3 +282,42 @@ markFinishedBtn.addEventListener('click', () => {
 
   closeModal();
 });
+
+
+const assignSelect = document.getElementById("assignTo");
+
+function loadStaffList() {
+  // Listen to users in real time
+  onSnapshot(collection(db, "users"), (staffSnapshot) => {
+    // Listen to customers in real time to get job counts
+    onSnapshot(collection(db, "customer"), (customerSnapshot) => {
+      const jobCounts = {};
+
+      // Count jobs assigned per staff
+      customerSnapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        if (data.assignedTo && (data.status === "Pending" || data.status === "In Progress")) {
+          const name = data.assignedTo.trim();
+          jobCounts[name] = (jobCounts[name] || 0) + 1;
+        }
+      });
+
+      // Clear and rebuild the dropdown
+      assignSelect.innerHTML = `<option value="">-- Select Staff (optional) --</option>`;
+
+      staffSnapshot.forEach((staffDoc) => {
+        const staffData = staffDoc.data();
+        const staffName = staffData.name || "Unnamed Staff";
+        const count = jobCounts[staffName] || 0;
+
+        const option = document.createElement("option");
+        option.value = staffName;
+        option.textContent = `${staffName} (${count})`;
+        assignSelect.appendChild(option);
+      });
+    });
+  });
+}
+
+// Call this when your page loads
+loadStaffList();

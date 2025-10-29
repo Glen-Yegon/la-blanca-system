@@ -73,13 +73,6 @@ async function loadJobs() {
 }
 
 
-
-// ==============================
-// RENDER JOB CARDS
-// ==============================
-// ==============================
-// RENDER JOB CARDS (UPDATED)
-// ==============================
 function renderJobs(jobs) {
   jobsContainer.innerHTML = "";
 
@@ -89,6 +82,11 @@ function renderJobs(jobs) {
   }
 
   jobs.forEach((job) => {
+    // 🚫 Skip jobs assigned to someone else
+    if (job.assignedTo && job.assignedTo.trim().toLowerCase() !== currentStaffName.trim().toLowerCase()) {
+      return; // don't render this card
+    }
+
     const servicesHTML = job.services
       .map((s) => `<div class="service-item"><span>${s.name}</span><span>Ksh ${s.price}</span></div>`)
       .join("");
@@ -96,7 +94,6 @@ function renderJobs(jobs) {
     const jobCard = document.createElement("div");
     jobCard.classList.add("job-card");
 
-    // 🔹 Display the jobUUID field
     jobCard.innerHTML = `
       <div class="job-header">
         <div>
@@ -126,10 +123,9 @@ function renderJobs(jobs) {
       </button>
     `;
 
-    // 🔹 Use jobUUID for Take/Finish actions
     const btn = jobCard.querySelector(".take-btn");
     btn.addEventListener("click", async () => {
-      const jobUUID = btn.dataset.uuid; // ✅ Use the jobUUID
+      const jobUUID = btn.dataset.uuid;
 
       if (job.status === "Pending") {
         await takeJob(jobUUID, jobCard);
