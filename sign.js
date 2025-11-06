@@ -1,43 +1,128 @@
-// script.js - Auth page interactions & simple three.js scene
+import { auth, db } from "./firebase-config.js";
 
-// ---------- FORM TOGGLE & INTERACTIONS ----------
-document.addEventListener('DOMContentLoaded', () => {
-  const toggles = document.querySelectorAll('.toggle-btn');
-  const loginForm = document.getElementById('loginForm');
-  const signupForm = document.getElementById('signupForm');
+import { 
+  createUserWithEmailAndPassword, 
+  signInWithEmailAndPassword 
+} from "https://www.gstatic.com/firebasejs/10.4.0/firebase-auth.js";
 
-  toggles.forEach(btn => {
-    btn.addEventListener('click', () => {
-      toggles.forEach(t => t.classList.remove('active'));
-      btn.classList.add('active');
-      const target = btn.dataset.target;
-      if (target === 'login') {
-        loginForm.classList.remove('hidden');
-        signupForm.classList.add('hidden');
-      } else {
-        signupForm.classList.remove('hidden');
-        loginForm.classList.add('hidden');
-      }
-      // set data-state for CSS if needed
-      document.getElementById('authCard').setAttribute('data-state', target);
+import { 
+  doc, setDoc, getDoc 
+} from "https://www.gstatic.com/firebasejs/10.4.0/firebase-firestore.js";
+
+
+// SIGNUP
+document.getElementById("signupForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  
+  const name = signupName.value.trim();
+  const email = signupEmail.value.trim();
+  const password = signupPassword.value.trim();
+  const confirm = signupConfirm.value.trim();
+  const role = signupRole.value.trim(); // "manager" or "owner"
+
+  if (password !== confirm) {
+    alert("Passwords do not match.");
+    return;
+  }
+
+  try {
+    // Create account in Firebase Auth
+    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+    const user = userCredential.user;
+
+    // Store user profile in Firestore
+    await setDoc(doc(db, "accounts", user.uid), {
+      name,
+      email,
+      role
     });
-  });
 
-  // Password show/hide toggles
-  document.querySelectorAll('.pw-toggle').forEach(toggle => {
-    toggle.addEventListener('click', () => {
-      const targetId = toggle.dataset.target;
-      const input = document.getElementById(targetId);
-      if (!input) return;
-      if (input.type === 'password') { input.type = 'text'; toggle.textContent = 'Hide'; }
-      else { input.type = 'password'; toggle.textContent = 'Show'; }
-    });
-  });
+    // Redirect based on role
+    if (role === "manager") {
+      window.location.href = "customer.html";
+    } else if (role === "owner") {
+      window.location.href = "manager.html";
+    }
 
-  // Back button
-  document.getElementById('backBtn').addEventListener('click', (e) => {
-    e.preventDefault();
-    window.history.back();
+  } catch (error) {
+    console.error(error);
+    alert(error.message);
+  }
+});
+
+
+// LOGIN
+document.getElementById("loginForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+
+  const email = loginEmail.value.trim();
+  const password = loginPassword.value.trim();
+
+  try {
+    const userCredential = await signInWithEmailAndPassword(auth, email, password);
+    const user = userCredential.user;
+
+    const profileSnap = await getDoc(doc(db, "accounts", user.uid));
+    
+    if (!profileSnap.exists()) {
+      alert("Profile not found.");
+      return;
+    }
+
+    const profile = profileSnap.data();
+
+    if (profile.role === "manager") {
+      window.location.href = "customer.html";
+    } 
+    else if (profile.role === "owner") {
+      window.location.href = "manager.html";
+    }
+
+  } catch (error) {
+    alert("Incorrect email or password.");
+  }
+});
+
+
+// Toggle Login ↔ Signup
+const toggleButtons = document.querySelectorAll('.toggle-btn');
+const loginForm = document.getElementById('loginForm');
+const signupForm = document.getElementById('signupForm');
+
+toggleButtons.forEach(btn => {
+  btn.addEventListener('click', () => {
+    toggleButtons.forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+
+    if (btn.dataset.target === 'signup') {
+      loginForm.classList.add('hidden');
+      signupForm.classList.remove('hidden');
+    } else {
+      signupForm.classList.add('hidden');
+      loginForm.classList.remove('hidden');
+    }
   });
 });
 
+
+// Password Show / Hide
+document.querySelectorAll('.pw-toggle').forEach(toggle => {
+  toggle.addEventListener('click', () => {
+    const targetId = toggle.dataset.target;
+    const input = document.getElementById(targetId);
+
+    if (input.type === "password") {
+      input.type = "text";
+      toggle.textContent = "Hide";
+    } else {
+      input.type = "password";
+      toggle.textContent = "Show";
+    }
+  });
+});
+
+
+// Back Button
+document.getElementById("backBtn").addEventListener("click", () => {
+  window.history.back();
+});

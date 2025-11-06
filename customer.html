@@ -3,20 +3,19 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>NIAPAY — Add Customer</title>
-
+  <title>NIAPAY — Staff Dashboard</title>
 
   <!-- Fonts -->
   <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,700;1,400;1,700&family=Poppins:wght@300;400;600;700;800&display=swap" rel="stylesheet">
 
-  
   <!-- Font Awesome -->
- <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" rel="stylesheet">
+
   <!-- Styles -->
-  <link rel="stylesheet" href="customer.min.css" />
+  <link rel="stylesheet" href="customer.css" />
 </head>
 <body>
-  <main class="page">
+  <main class="page" id="root">
     <header class="header">
       <div class="brand">
         <img src="Images/niapaylogo.png" alt="NIAPAY" class="logo" />
@@ -25,13 +24,19 @@
           <p class="subtitle">Add a car, choose services & track progress — fair assignment & transparent records.</p>
         </div>
       </div>
+
+      <!-- Simple sign-out / manager display -->
+      <div id="managerControls" style="display:flex;align-items:center;gap:12px;">
+        <div id="managerEmail" style="font-size:13px;opacity:.9;"></div>
+        <button id="signOutBtn" class="btn ghost">Sign Out</button>
+      </div>
     </header>
 
     <section class="controls">
-      <button id="addBtn" class="add-btn" aria-expanded="false" aria-controls="addForm" title="Add new customer">
+      <button id="addBtn" class="add-btn" aria-expanded="false" aria-controls="addForm" title="Add new job">
         <span class="plus">+</span>
       </button>
-      <p class="add-instruction">Press the plus to add a customer's details</p>
+      <p class="add-instruction">Press the plus to add a job</p>
     </section>
 
     <!-- Expandable form -->
@@ -55,32 +60,28 @@
             <input id="color" name="color" type="text" placeholder="White" required />
           </label>
 
-          <label class="field">
-            <span>Phone (optional)</span>
-            <input id="phone" name="phone" type="tel" placeholder="+2547XXXXXXXX" />
-          </label>
+
         </div>
 
         <div class="services-block">
           <span class="services-title">Select Services</span>
           <div class="services-grid" role="list">
-            <!-- Each service toggle uses data-price -->
-            <button type="button" class="service" data-price="200" aria-pressed="false" role="listitem">
+            <button type="button" class="service" data-price="200" aria-pressed="false"> 
               <div class="service-name">Normal Wash</div>
               <div class="service-price">Kshs 200</div>
             </button>
 
-            <button type="button" class="service" data-price="200" aria-pressed="false" role="listitem">
+            <button type="button" class="service" data-price="200" aria-pressed="false">
               <div class="service-name">Vacuum Wash</div>
               <div class="service-price">Kshs 200</div>
             </button>
 
-            <button type="button" class="service" data-price="300" aria-pressed="false" role="listitem">
-              <div class="service-name">Wax & Shine</div>
+            <button type="button" class="service" data-price="300" aria-pressed="false">
+              <div class="service-name">Wax &amp; Shine</div>
               <div class="service-price">Kshs 300</div>
             </button>
 
-            <button type="button" class="service" data-price="400" aria-pressed="false" role="listitem">
+            <button type="button" class="service" data-price="400" aria-pressed="false">
               <div class="service-name">Interior Deep Clean</div>
               <div class="service-price">Kshs 400</div>
             </button>
@@ -88,25 +89,6 @@
         </div>
 
         <div class="row">
-  <label class="field">
-    <span>Assign To (optional)</span>
-    <select id="assignTo" name="assignTo">
-      <option value="">-- Select Staff (optional) --</option>
-    </select>
-  </label>
-</div>
-
-        
-
-        <div class="row payment-row">
-          <label class="field payment-field">
-            <span>Payment method</span>
-            <div class="payment-options">
-              <label><input type="radio" name="payment" value="cash" checked /> Cash</label>
-              <label><input type="radio" name="payment" value="mpesa" /> M-Pesa</label>
-            </div>
-          </label>
-
           <div class="field total-field">
             <span>Total</span>
             <div id="total" class="total-amount">Kshs 0</div>
@@ -127,96 +109,80 @@
     </section>
   </main>
 
-  <!-- Receipt Modal -->
+  <!-- Receipt / job details Modal (reused for job view + take job) -->
   <div id="receiptModal" class="modal" aria-hidden="true" role="dialog" aria-modal="true">
-    <div class="modal-panel">
-      <button id="closeReceipt" class="modal-close" aria-label="Close receipt">&times;</button>
+    <div class="modal-panel" role="document">
+      <button id="closeReceipt" class="modal-close" aria-label="Close">&times;</button>
+
       <div class="receipt">
-        <h3>Receipt</h3>
+        <h3>Job Details</h3>
+        <div class="receipt-row"><strong>Job ID:</strong> <span id="r_jobid"></span></div>
         <div class="receipt-row"><strong>Number plate:</strong> <span id="r_plate"></span></div>
         <div class="receipt-row"><strong>Car model:</strong> <span id="r_model"></span></div>
         <div class="receipt-row"><strong>Color:</strong> <span id="r_color"></span></div>
-        <div class="receipt-row"><strong>Phone:</strong> <span id="r_phone"></span></div>
         <div class="receipt-row"><strong>Services:</strong>
           <ul id="r_services"></ul>
         </div>
-        <div class="receipt-row"><strong>Payment:</strong> <span id="r_payment"></span></div>
-        <div class="receipt-row total-row"><strong>Total:</strong> <span id="r_total"></span></div>
-        <div class="receipt-actions">
-          <button id="markFinished" class="btn primary">Mark Finished</button>
-        </div>
+
+<div class="receipt-row"><strong>Assigned to:</strong> <span id="r_assigned"></span></div>
+
+<!-- ADD DROPDOWN HERE (visible always) -->
+<div class="receipt-row">
+  <strong>Choose staff:</strong>
+  <select id="takeStaffSelect" style="min-width:180px; padding:8px; border-radius:6px;">
+    <option value="">-- Choose staff --</option>
+    <option value="Juma">Juma</option>
+    <option value="Alice">Alice</option>
+    <option value="Peter">Peter</option>
+  </select>
+</div>
+
+<div class="receipt-row total-row"><strong>Total:</strong> <span id="r_total"></span></div>
+
+<div class="receipt-actions">
+  <button id="takeJobBtn" class="btn primary">Take Job</button>
+  <button id="confirmAssignBtn" class="btn primary">Assign</button>
+  <button id="closeReceiptBtn" class="btn ghost">Close</button>
+</div>
+
+
       </div>
     </div>
   </div>
 
   <!-- Loader -->
-<div id="loader" class="loader">
-  <div class="spinner"></div>
-  <p>Loading jobs...</p>
-</div>
+  <div id="loader" class="loader">
+    <div class="spinner"></div>
+    <p>Loading jobs...</p>
+  </div>
 
-
-<footer class="footer" data-aos="fade-up">
-  <div class="footer-content">
-    <!-- Logo -->
-    <div class="footer-logo">
-      <img src="Images/niapaylogo.png" alt="NIAPAY Logo" />
-    </div>
-
-    <!-- Links -->
-    <div class="footer-links">
-      <a href="#">Home</a>
-      <a href="#">About</a>
-      <a href="#">Demo</a>
-      <a href="#">Contact</a>
-      <a href="#">Pricing</a>
-    </div>
-
-<!-- Social Media Icons -->
-<div class="footer-socials">
-  <a href="https://www.facebook.com/share/1A1SHZbfsN/?mibextid=wwXIfr"><i class="fab fa-facebook-f"></i></a>
-  <a href="https://www.instagram.com/nia_pay_systems?igsh=dXE3Nnd0OTkzOHV3&utm_source=qr"><i class="fab fa-instagram"></i></a>
-  <a href="https://x.com/pay_nia?s=21"><i class="fab fa-twitter"></i></a>
-    <a href="https://www.tiktok.com/@nia.pay.systems?_t=ZM-90OCsNGK5o8&_r=1"><i class="fab fa-tiktok"></i></a>
-</div>
-
-    <!-- Newsletter -->
-    <div class="newsletter">
-      <p>Subscribe to our newsletter for updates</p>
-      <form class="newsletter-form">
-        <input type="email" placeholder="Enter your email" required />
-        
-<button type="submit" class="subscribe-btn">Subscribe</button>
-
+  <!-- Sign-in Modal (simple manager sign-in) -->
+  <div id="signinModal" class="modal" aria-hidden="true" role="dialog" aria-modal="true">
+    <div class="modal-panel">
+      <h3>Manager sign in</h3>
+      <form id="signinForm">
+        <label class="field"><span>Email</span><input type="email" id="signInEmail" required /></label>
+        <label class="field"><span>Password</span><input type="password" id="signInPassword" required /></label>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
+          <button type="submit" class="btn primary">Sign in</button>
+        </div>
       </form>
     </div>
-
-    <!-- Divider Line -->
-    <hr class="footer-line" />
-
-    <!-- Copyright -->
-    <p class="footer-copy">
-      © 2025 NIAPAY. All Rights Reserved. | Designed by
-      <span>Pixel Pulse KE</span>
-    </p>
-
-<!-- Fun Ending Element -->
-<div class="footer-end">
-  <i class="fas fa-car"></i>
-  <p>Drive your business forward with <strong>NIAPAY</strong></p>
-</div>
-
   </div>
-</footer>
 
-
-
+  <footer class="footer" data-aos="fade-up">
+    <div class="footer-content">
+      <div class="footer-logo">
+        <img src="Images/niapaylogo.png" alt="NIAPAY Logo" />
+      </div>
+      <!-- ... keep your original footer links and content ... -->
+      <hr class="footer-line" />
+      <p class="footer-copy">© 2025 NIAPAY. All Rights Reserved. | Designed by <span>Pixel Pulse KE</span></p>
+    </div>
+  </footer>
 
   <!-- Scripts -->
-  <script type="module" src="customer.min.js"></script>
-
-  <!-- Firebase logic -->
-<script type="module" src="customer-firebase.min.js"></script>
-
+  <script type="module" src="firebase-config.js"></script>
+  <script type="module" src="customer-firebase.js"></script>
 </body>
 </html>
