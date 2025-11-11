@@ -14,7 +14,8 @@ import {
   where,
   orderBy,
   doc,
-  updateDoc
+  updateDoc,
+  deleteDoc
 } from "./firebase-config.js";
 
 
@@ -165,20 +166,24 @@ function renderJobCard(id, data) {
   const card = document.createElement("div");
   card.className = "card";
 
-  card.innerHTML = `
-    <div class="left">
-      <div class="plate">${data.plate}</div>
-      <div class="meta">${data.model} • ${data.phone || "No phone"}</div>
-    </div>
-    <div class="right">
-      <div class="tag">${data.status.replace("_", " ")}</div>
-      <button class="small-btn primary">${data.status === "pending" ? "Start" : data.status === "in_progress" ? "Complete" : "Completed"}</button>
-      <button class="small-btn ghost">Details</button>
-    </div>
-  `;
+card.innerHTML = `
+  <div class="left">
+    <div class="plate">${data.plate}</div>
+    <div class="meta">${data.model} • ${data.phone || "No phone"}</div>
+  </div>
+  <div class="right">
+    <div class="tag">${data.status.replace("_", " ")}</div>
+    <button class="small-btn primary">${data.status === "pending" ? "Start" : data.status === "in_progress" ? "Complete" : "Completed"}</button>
+    <button class="small-btn ghost">Details</button>
+    <button class="small-btn danger delete-btn">X</button>
+  </div>
+`;
+
 
   const action = card.querySelector(".primary");
   const details = card.querySelector(".ghost");
+  const del = card.querySelector(".delete-btn");
+
 
   details.onclick = () => openJobModal(id, data);
 
@@ -189,6 +194,14 @@ function renderJobCard(id, data) {
       openCustomerFinalizeModal(id, data);
     }
   };
+
+  del.onclick = async () => {
+  const confirmDelete = confirm("Remove this job permanently?");
+  if (!confirmDelete) return;
+
+  await deleteDoc(doc(db, "jobs", id));
+};
+
 
   cardsContainer.appendChild(card);
 }

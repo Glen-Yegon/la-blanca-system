@@ -648,3 +648,9 @@ a:focus, button:focus{outline:3px solid rgba(184,147,96,0.25); outline-offset:3p
 .footer.hidden {
   display: none;
 }
+
+
+.small-btn.danger {
+  background: #d9534f;
+  color: white;
+}
