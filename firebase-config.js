@@ -1,24 +1,28 @@
 // firebase-config.js
+// single-version, consistent Firebase SDK imports (v10.x)
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.4.0/firebase-app.js";
-import { 
-  getAuth, 
-  signInWithEmailAndPassword, 
-  signOut, 
-  onAuthStateChanged 
+import {
+  getAuth,
+  signInWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/10.4.0/firebase-auth.js";
 
-import { 
-  getFirestore, 
-  collection, 
-  addDoc, 
+import {
+  getFirestore,
+  collection,
+  addDoc,
   setDoc,
-  serverTimestamp, 
-  onSnapshot, 
-  query, 
+  serverTimestamp,
+  onSnapshot,
+  query,
   where,
-  orderBy, 
-  doc, 
-  updateDoc 
+  orderBy,
+  deleteDoc,
+  getDocs,
+  doc,
+  updateDoc,
+  Timestamp
 } from "https://www.gstatic.com/firebasejs/10.4.0/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -31,23 +35,24 @@ const firebaseConfig = {
   measurementId: "G-N11283LDYB"
 };
 
-// Initialize Firebase
 const app = initializeApp(firebaseConfig);
 
-// Export Auth + Firestore DB
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 
-// Export Firestore + Auth Utility Functions
+// export commonly used helpers
 export {
   signInWithEmailAndPassword,
   signOut,
   onAuthStateChanged,
   collection,
   addDoc,
-  setDoc,           // ✅ ADDED THIS
+  getDocs,
+  setDoc,
+  deleteDoc,
   serverTimestamp,
   onSnapshot,
+  Timestamp,
   query,
   where,
   orderBy,
