@@ -12,7 +12,7 @@
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" rel="stylesheet">
 
   <!-- Styles -->
-  <link rel="stylesheet" href="customer.min.css" />
+  <link rel="stylesheet" href="customer.css" />
 </head>
 <body>
   <main class="page" id="root">
@@ -182,6 +182,20 @@
 
   <!-- Scripts -->
   <script type="module" src="firebase-config.min.js"></script>
+
   <script type="module" src="customer-firebase.min.js"></script>
+  <script>
+    const addForm = document.getElementById("addForm");
+const footer = document.querySelector(".footer");
+
+// Observe changes to aria-hidden
+const observer = new MutationObserver(() => {
+  const isHidden = addForm.getAttribute("aria-hidden") === "true";
+  footer.classList.toggle("hidden", !isHidden);
+});
+
+observer.observe(addForm, { attributes: true, attributeFilter: ["aria-hidden"] });
+
+  </script>
 </body>
 </html>

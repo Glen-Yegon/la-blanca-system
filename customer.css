@@ -24,6 +24,7 @@ body{
   -moz-osx-font-smoothing:grayscale;
   font-family: 'Poppins', sans-serif;
   padding:20px;
+  overflow-x: hidden;
   min-height:100vh;
 }
 
@@ -262,7 +263,10 @@ body{
 /* Cards Section */
 .cards-section {
   margin-top: 26px;
+  max-height: 400px; /* adjust to your layout */
+  overflow-y: auto;
 }
+
 
 .section-title {
   margin: 0 0 12px;
@@ -286,10 +290,10 @@ body{
   border-radius: 14px;
   padding: 18px;
   border: 1px solid rgba(255, 255, 255, 0.08);
-
   display: flex;
   align-items: center;
   justify-content: space-between;
+  position: relative;
   gap: 14px;
   cursor: pointer;
   transition: 0.25s ease;
@@ -638,4 +642,9 @@ a:focus, button:focus{outline:3px solid rgba(184,147,96,0.25); outline-offset:3p
 .subscribe-btn:hover {
   background-color: transparent;
   transform: scale(1.05);
+}
+
+
+.footer.hidden {
+  display: none;
 }
