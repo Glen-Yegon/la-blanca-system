@@ -12,7 +12,7 @@
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" rel="stylesheet">
 
   <!-- Styles -->
-  <link rel="stylesheet" href="customer.min.css" />
+  <link rel="stylesheet" href="customer.css" />
 </head>
 <body>
   <main class="page" id="root">
@@ -62,6 +62,13 @@
 
         </div>
 
+        <div class="row">
+  <label class="field">
+    <span>Description (optional)</span>
+    <textarea id="description" name="description" placeholder="Any notes about the car…"></textarea>
+  </label>
+</div>
+
         <div class="services-block">
           <span class="services-title">Select Services</span>
           <div class="services-grid" role="list">
@@ -106,48 +113,56 @@
       <h2 class="section-title">Queued Cars</h2>
       <div id="cardsContainer" class="cards-container" aria-live="polite"></div>
     </section>
+    <section class="cards-section">
+  <h2 class="section-title">Cars In Progress</h2>
+  <div id="inProgressContainer" class="cards-container" aria-live="polite"></div>
+</section>
+
   </main>
 
-  <!-- Receipt / job details Modal (reused for job view + take job) -->
-  <div id="receiptModal" class="modal" aria-hidden="true" role="dialog" aria-modal="true">
-    <div class="modal-panel" role="document">
-      <button id="closeReceipt" class="modal-close" aria-label="Close">&times;</button>
+<!-- Receipt / job details Modal (reused for job view + take job) -->
+<div id="receiptModal" class="modal" aria-hidden="true" role="dialog" aria-modal="true">
+  <div class="modal-panel" role="document">
+    <button id="closeReceipt" class="modal-close" aria-label="Close">&times;</button>
 
-      <div class="receipt">
-        <h3>Job Details</h3>
-        <div class="receipt-row"><strong>Job ID:</strong> <span id="r_jobid"></span></div>
-        <div class="receipt-row"><strong>Number plate:</strong> <span id="r_plate"></span></div>
-        <div class="receipt-row"><strong>Car model:</strong> <span id="r_model"></span></div>
-        <div class="receipt-row"><strong>Color:</strong> <span id="r_color"></span></div>
-        <div class="receipt-row"><strong>Services:</strong>
-          <ul id="r_services"></ul>
-        </div>
+    <div class="receipt">
+      <h3>Job Details</h3>
+      <div class="receipt-row"><strong>Job ID:</strong> <span id="r_jobid"></span></div>
+      <div class="receipt-row"><strong>Number plate:</strong> <span id="r_plate"></span></div>
+      <div class="receipt-row"><strong>Car model:</strong> <span id="r_model"></span></div>
+      <div class="receipt-row"><strong>Description:</strong> <span id="r_description">—</span></div>
 
-<div class="receipt-row"><strong>Assigned to:</strong> <span id="r_assigned"></span></div>
+      <div class="receipt-row"><strong>Color:</strong> <span id="r_color"></span></div>
+      <div class="receipt-row"><strong>Services:</strong>
+        <ul id="r_services"></ul>
+      </div>
 
-<!-- ADD DROPDOWN HERE (visible always) -->
-<div class="receipt-row">
-  <strong>Choose staff:</strong>
-  <select id="takeStaffSelect" style="min-width:180px; padding:8px; border-radius:6px;">
-    <option value="">-- Choose staff --</option>
-    <option value="Juma">Juma</option>
-    <option value="Alice">Alice</option>
-    <option value="Peter">Peter</option>
-  </select>
-</div>
+      <div class="receipt-row"><strong>Assigned to:</strong> <span id="r_assigned"></span></div>
 
-<div class="receipt-row total-row"><strong>Total:</strong> <span id="r_total"></span></div>
+      <!-- Staff dropdown (always visible) -->
+      <div class="receipt-row">
+        <strong>Choose staff:</strong>
+        <select id="takeStaffSelect" style="min-width:180px; padding:8px; border-radius:6px;">
+          <option value="">-- Choose staff --</option>
+          <option value="Juma">Juma</option>
+          <option value="Alice">Alice</option>
+          <option value="Peter">Peter</option>
+        </select>
+      </div>
 
-<div class="receipt-actions">
-  <button id="takeJobBtn" class="btn primary">Take Job</button>
-  <button id="confirmAssignBtn" class="btn primary">Assign</button>
-  <button id="closeReceiptBtn" class="btn ghost">Close</button>
-</div>
+      <div class="receipt-row total-row"><strong>Total:</strong> <span id="r_total"></span></div>
 
-
+      <!-- Buttons -->
+      <div class="receipt-actions">
+        <button id="takeJobBtn" class="btn primary">Take Job</button>
+        <button id="confirmAssignBtn" class="btn primary">Assign</button>
+        <button id="modalDeleteBtn" class="btn danger">Delete Job</button>
+        <button id="closeReceiptBtn" class="btn ghost">Close</button>
       </div>
     </div>
   </div>
+</div>
+
 
   <!-- Loader -->
   <div id="loader" class="loader">
@@ -183,7 +198,7 @@
   <!-- Scripts -->
   <script type="module" src="firebase-config.min.js"></script>
 
-  <script type="module" src="customer-firebase.min.js"></script>
+  <script type="module" src="customer-firebase.js"></script>
   <script>
     const addForm = document.getElementById("addForm");
 const footer = document.querySelector(".footer");

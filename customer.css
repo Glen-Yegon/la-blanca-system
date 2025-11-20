@@ -338,48 +338,165 @@ body{
   color: rgba(255,255,255,0.78);
 }
 
-/* Modal */
-.modal{
-  position:fixed;
-  inset:0;
-  display:none;
-  align-items:center;
-  justify-content:center;
-  background: rgba(5,35,62,0.6);
-  z-index:9999;
-  padding: 18px;
+/* Description Textarea */
+#description {
+  width: 100%;
+  min-height: 80px;          /* initial height */
+  max-height: 200px;         /* optional max height */
+  padding: 10px 12px;        /* comfortable padding */
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12); /* subtle border */
+  background: rgba(255, 255, 255, 0.05);       /* semi-transparent for glassy effect */
+  color: var(--white);       /* matches your theme */
+  font-family: 'Poppins', sans-serif;
+  font-size: 14px;
+  resize: vertical;          /* allow vertical resizing */
+  outline: none;
+  transition: 0.25s ease;
+  box-sizing: border-box;
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
 }
 
-.modal[aria-hidden="false"]{ display:flex; }
+/* Focus state */
+#description:focus {
+  border-color: var(--gold);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* Placeholder styling */
+#description::placeholder {
+  color: rgba(255, 255, 255, 0.6);
+  font-style: italic;
+}
+
+/* Responsive adjustments */
+@media (max-width: 480px) {
+  #description {
+    font-size: 13px;
+    padding: 8px 10px;
+  }
+}
+
+
+
+/* Modal */
+.modal{
+  position: fixed;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(5,35,62,0.6);
+  z-index: 9999;
+  padding: 18px;
+  overflow-y: auto; /* allow scrolling if content overflows */
+}
+
+.modal[aria-hidden="false"]{ display: flex; }
 
 .modal-panel{
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0.667), rgba(255,255,255,0.01));
-  border-radius:12px;
-  padding:20px;
-  width:100%;
-  max-width:520px;
-  position:relative;
-  border:1px solid rgba(255,255,255,0.04);
+  background: black;
+  border-radius: 12px;
+  padding: 20px;
+  width: 100%;
+  max-width: 520px;
+  position: relative;
+  border: 1px solid rgba(255,255,255,0.04);
+  box-sizing: border-box;
 }
 
 .modal-close{
-  position:absolute;
-  right:14px;
-  top:10px;
-  background:transparent;
-  border:0;
-  font-size:26px;
-  color:var(--white);
-  cursor:pointer;
+  position: absolute;
+  right: 14px;
+  top: 10px;
+  background: transparent;
+  border: 0;
+  font-size: 26px;
+  color: var(--white);
+  cursor: pointer;
 }
 
-.receipt{ display:flex; flex-direction:column; gap:10px; font-family: 'Poppins', sans-serif; }
-.receipt h3{ margin:0; font-family: 'Lora', serif; color:var(--gold); }
-.receipt-row{ font-size:14px; color:rgba(255,255,255,0.92); }
-.receipt-row ul{ margin:6px 0 0 16px; padding:0; list-style:disc; color:rgba(255,255,255,0.95); }
-.total-row{ font-size:16px; font-weight:800; color:var(--gold); margin-top:4px; }
+.receipt{ 
+  display: flex; 
+  flex-direction: column; 
+  gap: 10px; 
+  font-family: 'Poppins', sans-serif; 
+}
 
-.receipt-actions{ margin-top:12px; display:flex; gap:10px; justify-content:flex-end; }
+.receipt h3{ 
+  margin: 0; 
+  font-family: 'Lora', serif; 
+  color: var(--gold); 
+  font-size: 20px;
+}
+
+.receipt-row{ 
+  font-size: 14px; 
+  color: rgba(255,255,255,0.92); 
+  word-break: break-word;
+}
+
+.receipt-row ul{ 
+  margin: 6px 0 0 16px; 
+  padding: 0; 
+  list-style: disc; 
+  color: rgba(255,255,255,0.95); 
+}
+
+.total-row{ 
+  font-size: 16px; 
+  font-weight: 800; 
+  color: var(--gold); 
+  margin-top: 4px; 
+}
+
+/* Receipt buttons */
+.receipt-actions{ 
+  margin-top: 12px; 
+  display: flex; 
+  gap: 10px; 
+  justify-content: flex-end; 
+  flex-wrap: wrap; /* allow buttons to wrap on small screens */
+}
+
+/* Buttons full width on small screens */
+@media (max-width: 480px) {
+  .modal-panel{
+    padding: 16px;
+    max-width: 100%;
+  }
+
+  .receipt h3{
+    font-size: 18px;
+  }
+
+  .receipt-row{
+    font-size: 13px;
+  }
+
+  .total-row{
+    font-size: 15px;
+  }
+
+  .receipt-actions{
+    flex-direction: column; /* stack buttons vertically */
+    gap: 8px;
+  }
+
+  .receipt-actions .btn{
+    width: 100%; /* full width buttons for mobile */
+  }
+}
+
+/* Optional: smaller modal close button on mobile */
+@media (max-width: 480px){
+  .modal-close{
+    font-size: 22px;
+    top: 6px;
+    right: 10px;
+  }
+}
 
 @media (max-width:900px){
   .services-grid{ grid-template-columns: repeat(2, 1fr); }

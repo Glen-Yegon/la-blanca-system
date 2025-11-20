@@ -108,27 +108,30 @@ const plateInput = document.getElementById("plate");
 const modelInput = document.getElementById("model");
 const colorInput = document.getElementById("color");
 
+const descriptionInput = document.getElementById("description");
+
 customerForm.addEventListener("submit", async (e) => {
   e.preventDefault();
 
   const plate = plateInput.value.trim();
   const model = modelInput.value.trim();
   const color = colorInput.value.trim();
+  const description = descriptionInput.value.trim(); // <-- new
 
   const servicesArr = [...selectedServices].map(s => JSON.parse(s));
   const total = servicesArr.reduce((s, x) => s + x.price, 0);
 
-  // No phone, no assignment yet → manager assigns later
   const status = "pending";
 
   await addDoc(collection(db, "jobs"), {
     plate,
     model,
     color,
-    phone: "",            // intentionally blank for now
+    description,       // <-- save description
+    phone: "",
     services: servicesArr,
     total,
-    assignedTo: "",       // assigned later
+    assignedTo: "",
     status,
     createdAt: serverTimestamp()
   });
@@ -139,12 +142,11 @@ customerForm.addEventListener("submit", async (e) => {
 
 
 /* -------------------------
-   LIVE JOBS
-   -------------------------*/
+   LIVE JOBS (Separated)
+-------------------------*/
 function startJobsListener() {
   loader.style.display = "flex";
 
-  // ✅ Only fetch jobs where status is pending or in_progress
   const q = query(
     collection(db, "jobs"),
     where("status", "in", ["pending", "in_progress"]),
@@ -152,41 +154,61 @@ function startJobsListener() {
   );
 
   return onSnapshot(q, (snap) => {
-    cardsContainer.innerHTML = "";
-    snap.forEach(docSnap => renderJobCard(docSnap.id, docSnap.data()));
+
+    const pendingContainer = document.getElementById("cardsContainer"); // queued cars
+    const inProgressContainer = document.getElementById("inProgressContainer");
+
+    // Clear both sections
+    pendingContainer.innerHTML = "";
+    inProgressContainer.innerHTML = "";
+
+    snap.forEach(docSnap => {
+      const data = docSnap.data();
+      const id = docSnap.id;
+
+      // Create the job card
+      const card = renderJobCard(id, data);
+
+      // Append to correct section
+      if (data.status === "pending") {
+        pendingContainer.appendChild(card);
+      } else if (data.status === "in_progress") {
+        inProgressContainer.appendChild(card);
+      }
+    });
+
     loader.style.display = "none";
   });
 }
 
-
 /* -------------------------
    JOB CARD
-   -------------------------*/
+-------------------------*/
 function renderJobCard(id, data) {
   const card = document.createElement("div");
   card.className = "card";
 
-card.innerHTML = `
-  <div class="left">
-    <div class="plate">${data.plate}</div>
-    <div class="meta">${data.model} • ${data.phone || "No phone"}</div>
-  </div>
-  <div class="right">
-    <div class="tag">${data.status.replace("_", " ")}</div>
-    <button class="small-btn primary">${data.status === "pending" ? "Start" : data.status === "in_progress" ? "Complete" : "Completed"}</button>
-    <button class="small-btn ghost">Details</button>
-    <button class="small-btn danger delete-btn">X</button>
-  </div>
-`;
-
+  card.innerHTML = `
+    <div class="left">
+      <div class="plate">${data.plate}</div>
+    </div>
+    <div class="right">
+      <div class="actions-column">
+        <button class="small-btn primary">
+          ${data.status === "pending" ? "Start" : data.status === "in_progress" ? "Complete" : "Completed"}
+        </button>
+        <button class="small-btn ghost">Details</button>
+      </div>
+    </div>
+  `;
 
   const action = card.querySelector(".primary");
   const details = card.querySelector(".ghost");
-  const del = card.querySelector(".delete-btn");
 
-
+  // Show details modal
   details.onclick = () => openJobModal(id, data);
 
+  // Update status
   action.onclick = async () => {
     if (data.status === "pending") {
       await updateDoc(doc(db, "jobs", id), { status: "in_progress" });
@@ -195,20 +217,13 @@ card.innerHTML = `
     }
   };
 
-  del.onclick = async () => {
-  const confirmDelete = confirm("Remove this job permanently?");
-  if (!confirmDelete) return;
-
-  await deleteDoc(doc(db, "jobs", id));
-};
-
-
-  cardsContainer.appendChild(card);
+  return card; // No delete button here anymore
 }
+
 
 /* -------------------------
    JOB DETAILS MODAL
-   -------------------------*/
+-------------------------*/
 function openJobModal(id, data) {
   currentJobId = id;
 
@@ -216,24 +231,37 @@ function openJobModal(id, data) {
   r_plate.textContent = data.plate;
   r_model.textContent = data.model;
   r_color.textContent = data.color;
+  r_description.textContent = data.description || "—"; // <-- new
   r_services.innerHTML = data.services.map(s => `<li>${s.name} — Kshs ${s.price}</li>`).join("");
 
-  // Show current assigned person or blank
+  // Assignment controls
   takeStaffSelect.value = data.assignedTo || "";
-
   r_assigned.textContent = data.assignedTo || "—";
   r_total.textContent = `Kshs ${data.total}`;
 
-  // Always show assignment controls in modal
   takeStaffSelect.style.display = "block";
   confirmAssignBtn.style.display = "block";
-
-  // Show or hide Take Job button depending on status
   takeJobBtn.style.display = data.status === "pending" ? "block" : "none";
+
+  modalDeleteBtn.style.display = "block";
+  modalDeleteBtn.onclick = async () => {
+    const confirmDelete = confirm("Remove this job permanently?");
+    if (!confirmDelete) return;
+
+    try {
+      await deleteDoc(doc(db, "jobs", id));
+      closeModal();
+    } catch (error) {
+      console.error("Failed to delete job:", error);
+      alert("Error deleting job. Please try again.");
+    }
+  };
 
   receiptModal.setAttribute("aria-hidden", "false");
 }
 
+
+// Close modal handlers
 closeReceipt.onclick = closeModal;
 closeReceiptBtn.onclick = closeModal;
 
