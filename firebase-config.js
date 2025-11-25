@@ -15,6 +15,7 @@ import {
   setDoc,
   serverTimestamp,
   onSnapshot,
+  collectionGroup,
   query,
   where,
   orderBy,
@@ -57,5 +58,6 @@ export {
   where,
   orderBy,
   doc,
+  collectionGroup,
   updateDoc
 };

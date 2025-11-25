@@ -1,0 +1,229 @@
+    <!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>NIAPAY — Staff Dashboard</title>
+
+  <!-- Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,700;1,400;1,700&family=Poppins:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Font Awesome -->
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" rel="stylesheet">
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="customer.css" />
+</head>
+<body>
+  <main class="page" id="root">
+    <header class="header">
+      <div class="brand">
+        <img src="Images/niapaylogo.png" alt="NIAPAY" class="logo" />
+        <div>
+          <h1 class="title">NIAPAY Carwash System</h1>
+        </div>
+      </div>
+
+      <!-- Simple sign-out / manager display -->
+      <div id="managerControls" style="display:flex;align-items:center;gap:12px;">
+        <div id="managerEmail" style="font-size:13px;opacity:.9;"></div>
+        <button id="signOutBtn" class="btn ghost">Sign Out</button>
+      </div>
+    </header>
+
+    <section class="controls">
+      <button id="addBtn" class="add-btn" aria-expanded="false" aria-controls="addForm" title="Add new job">
+        <span class="plus">+</span>
+      </button>
+      <p class="add-instruction">Press the plus to add a job</p>
+    </section>
+
+    <!-- Expandable form -->
+    <section id="addForm" class="add-form" aria-hidden="true">
+      <form id="customerForm" novalidate>
+
+        <div class="row">
+  <label class="field">
+    <span>Company Name</span>
+    <select id="company" name="company" required>
+      <option value="" disabled selected>Select company</option>
+      <option value="Magara Farms">Magara Farms</option>
+      <option value="Safari Logistics Ltd">Safari Logistics Ltd</option>
+      <option value="PrimeMilk Delivery Co">PrimeMilk Delivery Co</option>
+    </select>
+  </label>
+</div>
+
+        <div class="row">
+          <label class="field">
+            <span>Number plate</span>
+            <input id="plate" name="plate" type="text" placeholder="KAA 123A" required />
+          </label>
+
+          <label class="field">
+            <span>Car model</span>
+            <input id="model" name="model" type="text" placeholder="Toyota Corolla" required />
+          </label>
+        </div>
+
+        <div class="row">
+          <label class="field">
+            <span>Color</span>
+            <input id="color" name="color" type="text" placeholder="White" required />
+          </label>
+
+
+        </div>
+
+        <div class="row">
+  <label class="field">
+    <span>Description (optional)</span>
+    <textarea id="description" name="description" placeholder="Any notes about the car…"></textarea>
+  </label>
+</div>
+
+        <div class="services-block">
+          <span class="services-title">Select Services</span>
+          <div class="services-grid" role="list">
+            <button type="button" class="service" data-price="200" aria-pressed="false"> 
+              <div class="service-name">Normal Wash</div>
+              <div class="service-price">Kshs 200</div>
+            </button>
+
+            <button type="button" class="service" data-price="200" aria-pressed="false">
+              <div class="service-name">Vacuum Wash</div>
+              <div class="service-price">Kshs 200</div>
+            </button>
+
+            <button type="button" class="service" data-price="300" aria-pressed="false">
+              <div class="service-name">Wax &amp; Shine</div>
+              <div class="service-price">Kshs 300</div>
+            </button>
+
+            <button type="button" class="service" data-price="400" aria-pressed="false">
+              <div class="service-name">Interior Deep Clean</div>
+              <div class="service-price">Kshs 400</div>
+            </button>
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="field total-field">
+            <span>Total</span>
+            <div id="total" class="total-amount">Kshs 0</div>
+          </div>
+        </div>
+
+        <div class="form-actions">
+          <button type="submit" class="btn primary">Done</button>
+          <button type="button" id="cancelBtn" class="btn ghost">Cancel</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- Cards list -->
+    <section class="cards-section">
+      <h2 class="section-title">Queued Cars</h2>
+      <div id="cardsContainer" class="cards-container" aria-live="polite"></div>
+    </section>
+    <section class="cards-section">
+  <h2 class="section-title">Cars In Progress</h2>
+  <div id="inProgressContainer" class="cards-container" aria-live="polite"></div>
+</section>
+
+  </main>
+
+<!-- Receipt / job details Modal (reused for job view + take job) -->
+<div id="receiptModal" class="modal" aria-hidden="true" role="dialog" aria-modal="true">
+  <div class="modal-panel" role="document">
+    <button id="closeReceipt" class="modal-close" aria-label="Close">&times;</button>
+
+    <div class="receipt">
+      <h3>Job Details</h3>
+      <div class="receipt-row"><strong>Job ID:</strong> <span id="r_jobid"></span></div>
+      <div class="receipt-row"><strong>Number plate:</strong> <span id="r_plate"></span></div>
+      <div class="receipt-row"><strong>Company:</strong> <span id="r_company"></span></div>
+      <div class="receipt-row"><strong>Car model:</strong> <span id="r_model"></span></div>
+      <div class="receipt-row"><strong>Description:</strong> <span id="r_description">—</span></div>
+      <div class="receipt-row"><strong>Color:</strong> <span id="r_color"></span></div>
+      <div class="receipt-row"><strong>Services:</strong>
+        <ul id="r_services"></ul>
+      </div>
+
+      <div class="receipt-row"><strong>Assigned to:</strong> <span id="r_assigned"></span></div>
+
+      <!-- Staff dropdown (always visible) -->
+      <div class="receipt-row">
+        <strong>Choose staff:</strong>
+        <select id="takeStaffSelect" style="min-width:180px; padding:8px; border-radius:6px;">
+          <option value="">-- Choose staff --</option>
+          <option value="Juma">Juma</option>
+          <option value="Alice">Alice</option>
+          <option value="Peter">Peter</option>
+        </select>
+      </div>
+
+      <div class="receipt-row total-row"><strong>Total:</strong> <span id="r_total"></span></div>
+
+      <!-- Buttons -->
+      <div class="receipt-actions">
+        <button id="takeJobBtn" class="btn primary">Take Job</button>
+        <button id="confirmAssignBtn" class="btn primary">Assign</button>
+        <button id="modalDeleteBtn" class="btn danger">Delete Job</button>
+        <button id="closeReceiptBtn" class="btn ghost">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+  <!-- Loader -->
+  <div id="loader" class="loader">
+    <div class="spinner"></div>
+    <p>Loading jobs...</p>
+  </div>
+
+  <!-- Sign-in Modal (simple manager sign-in) -->
+  <div id="signinModal" class="modal" aria-hidden="true" role="dialog" aria-modal="true">
+    <div class="modal-panel">
+      <h3>Manager sign in</h3>
+      <form id="signinForm">
+        <label class="field"><span>Email</span><input type="email" id="signInEmail" required /></label>
+        <label class="field"><span>Password</span><input type="password" id="signInPassword" required /></label>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
+          <button type="submit" class="btn primary">Sign in</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <footer class="footer" data-aos="fade-up">
+    <div class="footer-content">
+      <div class="footer-logo">
+        <img src="Images/niapaylogo.png" alt="NIAPAY Logo" />
+      </div>
+      <!-- ... keep your original footer links and content ... -->
+      <hr class="footer-line" />
+      <p class="footer-copy">© 2025 NIAPAY. All Rights Reserved. | Designed by <span>Pixel Pulse KE</span></p>
+    </div>
+  </footer>
+
+  <!-- Scripts -->
+  <script type="module" src="firebase-config.min.js"></script>
+
+  <script type="module" src="coop-firebase.js"></script>
+  <script>
+    const addForm = document.getElementById("addForm");
+const footer = document.querySelector(".footer");
+
+// Observe changes to aria-hidden
+const observer = new MutationObserver(() => {
+  const isHidden = addForm.getAttribute("aria-hidden") === "true";
+  footer.classList.toggle("hidden", !isHidden);
+});
+
+observer.observe(addForm, { attributes: true, attributeFilter: ["aria-hidden"] });
+
+  </script>
+</body>
+</html>
