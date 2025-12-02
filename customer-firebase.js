@@ -12,6 +12,7 @@ import {
   onSnapshot,
   query,
   where,
+  getDocs,
   orderBy,
   doc,
   updateDoc,
@@ -356,6 +357,76 @@ function openCustomerFinalizeModal(id, data) {
   };
 }
 
+
+async function renderServices() {
+  const servicesGrid = document.getElementById("servicesGrid");
+  if (!servicesGrid) return;
+
+  try {
+    const servicesRef = collection(db, "services");
+    const snap = await getDocs(servicesRef);
+
+    if (snap.empty) {
+      servicesGrid.innerHTML = `<div class="muted">No services available</div>`;
+      return;
+    }
+
+    // Generate buttons for each service
+    servicesGrid.innerHTML = snap.docs.map(docSnap => {
+      const s = docSnap.data();
+      const name = s.name || "Unnamed Service";
+      const price = s.price || 0;
+
+      return `
+        <button type="button" class="service" data-price="${price}" aria-pressed="false">
+          <div class="service-name">${name}</div>
+          <div class="service-price">Kshs ${price}</div>
+        </button>
+      `;
+    }).join("");
+
+  } catch (err) {
+    console.error("Failed to load services:", err);
+    servicesGrid.innerHTML = `<div class="muted">Failed to load services</div>`;
+  }
+}
+
+// Call the function when the page loads or panel is opened
+renderServices();
+
+
+
+async function populateStaffDropdown() {
+  const staffSelect = document.getElementById("takeStaffSelect");
+  if (!staffSelect) return;
+
+  try {
+    const staffRef = collection(db, "staff");
+    const snap = await getDocs(staffRef);
+
+    // Clear previous options except the placeholder
+    staffSelect.innerHTML = `<option value="">-- Choose staff --</option>`;
+
+    snap.forEach(docSnap => {
+      const staff = docSnap.data();
+      const fullName = `${staff.firstName || ""} ${staff.lastName || ""}`.trim();
+      if (fullName) {
+        const option = document.createElement("option");
+        option.value = fullName;
+        option.textContent = fullName;
+        staffSelect.appendChild(option);
+      }
+    });
+
+  } catch (err) {
+    console.error("Failed to load staff:", err);
+    // Optionally show an error option
+    staffSelect.innerHTML = `<option value="">Failed to load staff</option>`;
+  }
+}
+
+// Call this function when page loads or when the receipt panel opens
+populateStaffDropdown();
 
 /* -------------------------
    AUTH

@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>NIAPAY — Owner Dashboard</title>
 
+  
   <!-- Fonts -->
   <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,700;1,400;1,700&family=Poppins:wght@300;400;600;700;800&display=swap" rel="stylesheet">
 
@@ -148,30 +149,29 @@
           </div>
         </section>
 
-        <!-- STAFF PERFORMANCE -->
-        <section id="staff" class="panel">
-          <h3>Staff Performance</h3>
-          <div id="staffGrid" class="staff-grid"></div>
-
 <!-- STAFF PERFORMANCE -->
-<div class="export-options">
-  <button class="export-btn" data-export-target="staffGrid">
-    <i class="fas fa-file-export"></i> Export Staff
-  </button>
-</div>
-        </section>
+<section id="staff" class="panel">
+  <h3>Staff Performance</h3>
+  <div id="staffGrid" class="staff-grid"></div>
+
+  <div class="export-options">
+    <button class="export-btn" data-export-target="staffGrid">
+      <i class="fas fa-file-export"></i> Export Staff
+    </button>
+  </div>
+</section>
 
         <!-- REPORTS -->
         <section id="reports" class="panel">
           <h3>Reports</h3>
           <div class="report-block">
-            <h4>Summary (no charts)</h4>
+            
             <ul id="reportsList" class="reports-list"></ul>
           </div>
 
-<!-- Cash Reports Section -->
+<!-- Reports Section -->
 <div class="report-block" id="cashReportsBlock">
-  <h4>Cash & Mpesa Reports</h4>
+  <h4>Mpesa Reports</h4>
   <div class="filters">
     <select id="cashReportDateFilter">
       <option value="all">All Time</option>
@@ -194,21 +194,44 @@
 
         </section>
 
-        <!-- ADMIN CONTROLS -->
-        <section id="admin" class="panel">
-          <h3>Admin Controls</h3>
+<!-- ADMIN CONTROLS -->
+<section id="admin" class="panel">
+  <h3>Admin Controls</h3>
 
-          <div class="admin-block">
-            <h4>Manage Staff (from users collection)</h4>
-            <div id="usersList" class="users-list"></div>
-            <p class="muted">Removing a staff will delete their Firestore record and request Auth deletion (server function required).</p>
-          </div>
+  <!-- STAFF MANAGEMENT -->
+  <div class="admin-block" id="staffBlock">
+    <h4>Staff Management</h4>
+    <div class="admin-form">
+      <input type="text" id="staffFirstName" placeholder="First Name" />
+      <input type="text" id="staffLastName" placeholder="Last Name" />
+      <button id="addStaffBtn" class="btn primary">Add Staff</button>
+    </div>
+    <ul id="staffList" class="admin-list"></ul>
+  </div>
 
-          <div class="admin-block">
-            <h4>Pricing</h4>
-            <p class="muted">Pricing management will be added later.</p>
-          </div>
-        </section>
+  <!-- SERVICES MANAGEMENT -->
+  <div class="admin-block" id="servicesBlock">
+    <h4>Services Management</h4>
+    <div class="admin-form">
+      <input type="text" id="serviceName" placeholder="Service Name" />
+      <input type="number" id="servicePrice" placeholder="Price (Ksh)" />
+      <button id="addServiceBtn" class="btn primary">Add Service</button>
+    </div>
+    <ul id="servicesList" class="admin-list"></ul>
+  </div>
+
+  <!-- COMPANIES MANAGEMENT -->
+  <div class="admin-block" id="companiesBlock">
+    <h4>Corporate Companies</h4>
+    <div class="admin-form">
+      <input type="text" id="companyName" placeholder="Full Company Name" />
+      <button id="addCompanyBtn" class="btn primary">Add Company</button>
+    </div>
+    <ul id="companiesList" class="admin-list"></ul>
+  </div>
+</section>
+
+
 
         <!-- ACTIVITY LOG -->
         <section id="activity" class="panel">
@@ -281,6 +304,18 @@
   </div>
 </footer>
 
+<div id="jobModal" class="modal hidden">
+  <div class="modal-content">
+    <span id="closeJobModal" class="modal-close">&times;</span>
+
+    <h2 class="modal-title">Job Details</h2>
+
+    <div id="modalBody" class="modal-body">
+      Loading...
+    </div>
+  </div>
+</div>
+
 
   <!-- 🔹 LOADER -->
 <div id="loader" class="loader hidden">
@@ -300,6 +335,135 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/docxtemplater/3.29.0/docxtemplater.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PDFMake/0.2.7/pdfmake.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PDFMake/0.2.7/vfs_fonts.js"></script>
+
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  const exportBtn = document.querySelector(".export-btn");
+  console.log("Export button element:", exportBtn);
+
+  if (!exportBtn) return console.error("Export button not found!");
+
+  exportBtn.addEventListener("click", async () => {
+    console.log("Export button clicked"); // Debug log
+
+    try {
+      const formatInput = prompt("Choose export format: PDF, DOCX, or CSV");
+      if (!formatInput) {
+        console.warn("Export canceled by user");
+        return;
+      }
+
+      const format = formatInput.toLowerCase();
+      console.log("Selected format:", format);
+
+      if (!["pdf","docx","csv"].includes(format)) {
+        console.error("Invalid format selected:", format);
+        return alert("Invalid format selected!");
+      }
+
+      // Gather staff data from rendered grid
+      const staffCards = document.querySelectorAll("#staffGrid .staff-card");
+      console.log("Found staff cards:", staffCards.length);
+
+      if (!staffCards.length) {
+        console.warn("No staff data available to export");
+        return alert("No staff data available to export");
+      }
+
+      const staffData = Array.from(staffCards).map(card => {
+        const name = card.querySelector(".info .name")?.textContent.trim() || "N/A";
+        const meta = card.querySelector(".info .meta")?.textContent.trim() || "";
+        const [jobsText, revenueText, commissionText] = meta.split("•").map(t => t.trim());
+        return { 
+          name, 
+          jobs: jobsText?.split(": ")[1] || "0", 
+          revenue: revenueText?.split(": ")[1] || "0", 
+          commission: commissionText?.split(": ")[1] || "0" 
+        };
+      });
+
+      console.log("Staff data prepared for export:", staffData);
+
+      if (format === "csv") {
+        exportCSV(staffData);
+      } else if (format === "pdf") {
+        exportPDF(staffData);
+      } else if (format === "docx") {
+        exportDOCX(staffData);
+      }
+
+    } catch (err) {
+      console.error("Error during export:", err);
+      alert("An error occurred while exporting. Check console for details.");
+    }
+  });
+
+  /* ----------- CSV Export ----------- */
+  function exportCSV(data) {
+    console.log("Exporting CSV...");
+    const headers = ["Name","Jobs Completed","Revenue","Commission"];
+    const csvRows = [
+      headers.join(","),
+      ...data.map(d => `${d.name},${d.jobs},${d.revenue},${d.commission}`)
+    ];
+    const csvBlob = new Blob([csvRows.join("\n")], { type: "text/csv;charset=utf-8" });
+    console.log("CSV blob created");
+    saveAs(csvBlob, `Staff_Performance_${new Date().toISOString().slice(0,10)}.csv`);
+  }
+
+  /* ----------- PDF Export ----------- */
+  function exportPDF(data) {
+    console.log("Exporting PDF...");
+    const docDefinition = {
+      content: [
+        { text: 'Staff Performance Report', style: 'header', alignment: 'center' },
+        { text: `Generated: ${new Date().toLocaleDateString()}`, style: 'subheader', alignment: 'center', margin: [0,0,0,20] },
+        {
+          table: {
+            headerRows: 1,
+            widths: ['*','auto','auto','auto'],
+            body: [
+              ["Name","Jobs Completed","Revenue","Commission"],
+              ...data.map(d => [d.name, d.jobs, d.revenue, d.commission])
+            ]
+          },
+          layout: 'lightHorizontalLines'
+        }
+      ],
+      styles: {
+        header: { fontSize: 18, bold: true },
+        subheader: { fontSize: 12, italics: true },
+      }
+    };
+    pdfMake.createPdf(docDefinition).download(`Staff_Performance_${new Date().toISOString().slice(0,10)}.pdf`);
+    console.log("PDF download triggered");
+  }
+
+  /* ----------- DOCX Export ----------- */
+  function exportDOCX(data) {
+    console.log("Exporting DOCX...");
+    try {
+      const tableRows = data.map(d => [d.name, d.jobs, d.revenue, d.commission]);
+      const docContent = `
+        <w:tbl>
+          <w:tr>
+            <w:tc><w:p><w:r><w:t>Name</w:t></w:r></w:p></w:tc>
+            <w:tc><w:p><w:r><w:t>Jobs Completed</w:t></w:r></w:p></w:tc>
+            <w:tc><w:p><w:r><w:t>Revenue</w:t></w:r></w:p></w:tc>
+            <w:tc><w:p><w:r><w:t>Commission</w:t></w:r></w:p></w:tc>
+          </w:tr>
+          ${tableRows.map(row => `<w:tr>${row.map(cell => `<w:tc><w:p><w:r><w:t>${cell}</w:t></w:r></w:p></w:tc>`).join('')}</w:tr>`).join('')}
+        </w:tbl>
+      `;
+      const blob = new Blob([docContent], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
+      saveAs(blob, `Staff_Performance_${new Date().toISOString().slice(0,10)}.docx`);
+      console.log("DOCX download triggered");
+    } catch (err) {
+      console.error("Error generating DOCX:", err);
+    }
+  }
+});
+</script>
 
 
 </body>

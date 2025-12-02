@@ -12,7 +12,7 @@
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" rel="stylesheet">
 
   <!-- Styles -->
-  <link rel="stylesheet" href="customer.css" />
+  <link rel="stylesheet" href="customer.min.css" />
 </head>
 <body>
   <main class="page" id="root">
@@ -69,30 +69,13 @@
   </label>
 </div>
 
-        <div class="services-block">
-          <span class="services-title">Select Services</span>
-          <div class="services-grid" role="list">
-            <button type="button" class="service" data-price="200" aria-pressed="false"> 
-              <div class="service-name">Normal Wash</div>
-              <div class="service-price">Kshs 200</div>
-            </button>
+<div class="services-block">
+  <span class="services-title">Select Services</span>
+  <div id="servicesGrid" class="services-grid" role="list">
+    <!-- Services buttons will be dynamically injected here -->
+  </div>
+</div>
 
-            <button type="button" class="service" data-price="200" aria-pressed="false">
-              <div class="service-name">Vacuum Wash</div>
-              <div class="service-price">Kshs 200</div>
-            </button>
-
-            <button type="button" class="service" data-price="300" aria-pressed="false">
-              <div class="service-name">Wax &amp; Shine</div>
-              <div class="service-price">Kshs 300</div>
-            </button>
-
-            <button type="button" class="service" data-price="400" aria-pressed="false">
-              <div class="service-name">Interior Deep Clean</div>
-              <div class="service-price">Kshs 400</div>
-            </button>
-          </div>
-        </div>
 
         <div class="row">
           <div class="field total-field">
@@ -139,16 +122,15 @@
 
       <div class="receipt-row"><strong>Assigned to:</strong> <span id="r_assigned"></span></div>
 
-      <!-- Staff dropdown (always visible) -->
-      <div class="receipt-row">
-        <strong>Choose staff:</strong>
-        <select id="takeStaffSelect" style="min-width:180px; padding:8px; border-radius:6px;">
-          <option value="">-- Choose staff --</option>
-          <option value="Juma">Juma</option>
-          <option value="Alice">Alice</option>
-          <option value="Peter">Peter</option>
-        </select>
-      </div>
+<!-- Staff dropdown (always visible) -->
+<div class="receipt-row">
+  <strong>Choose staff:</strong>
+  <select id="takeStaffSelect" style="min-width:180px; padding:8px; border-radius:6px;">
+    <option value="">-- Choose staff --</option>
+    <!-- Staff options will be dynamically inserted here -->
+  </select>
+</div>
+
 
       <div class="receipt-row total-row"><strong>Total:</strong> <span id="r_total"></span></div>
 
@@ -198,7 +180,7 @@
   <!-- Scripts -->
   <script type="module" src="firebase-config.min.js"></script>
 
-  <script type="module" src="customer-firebase.js"></script>
+  <script type="module" src="customer-firebase.min.js"></script>
   <script>
     const addForm = document.getElementById("addForm");
 const footer = document.querySelector(".footer");

@@ -5,6 +5,9 @@ import {
   db,
   onAuthStateChanged,
   collection,
+  collectionGroup,
+  addDoc,
+  setDoc,
   serverTimestamp,
   onSnapshot,
   query,
@@ -13,6 +16,7 @@ import {
   doc,
   updateDoc,
   getDocs,
+  getDoc,
   deleteDoc,
   Timestamp
 } from "./firebase-config.js";
@@ -97,108 +101,154 @@ function startOfRange(range) {
   }
 }
 
-/* ------------------------- overview listener ------------------------- */
-function startOverviewListener(dateRange = "all") {
-  if (unsubOverview) unsubOverview();
+/* ------------------------- overview listener (with collection group) ------------------------- */
+async function startOverviewListener(dateRange = "all") {
+  console.log("Starting overview listener for range:", dateRange);
+
+  if (unsubOverview) {
+    console.log("Unsubscribing previous overview listener");
+    unsubOverview();
+  }
+
   showLoader();
 
-  const jobsRef = collection(db, "jobs");
   const rangeStart = startOfRange(dateRange);
-  const qAll = rangeStart ? query(jobsRef, where("createdAt", ">=", rangeStart), orderBy("createdAt", "desc")) : query(jobsRef, orderBy("createdAt", "desc"));
+  console.log("Range start:", rangeStart);
 
-unsubOverview = onSnapshot(qAll, snap => {
-  let pending = 0, inprogress = 0, completed = 0, revenue = 0;
-  const quick = [];
+  try {
+    // Collection group query: fetch all jobs, including corporate jobs
+    const jobsRef = collectionGroup(db, "jobs");
 
-  snap.forEach(docSnap => {
-    const d = docSnap.data();
-    const st = d.status;
+    const clauses = [];
+    if (rangeStart) clauses.push(where("createdAt", ">=", rangeStart));
 
-    if (st === "pending") pending++;
-    else if (st === "in_progress") inprogress++;
-    else if (st === "completed") {
-      completed++;
-      revenue += Number(d.total || 0); // only add completed jobs to revenue
+    const qAllJobs = clauses.length
+      ? query(jobsRef, ...clauses, orderBy("createdAt", "desc"))
+      : query(jobsRef, orderBy("createdAt", "desc"));
+
+    const jobsSnap = await getDocs(qAllJobs);
+    console.log("Total jobs found (collection group):", jobsSnap.size);
+
+    let pending = 0, inprogress = 0, completed = 0, revenue = 0;
+    const quick = [];
+
+    jobsSnap.forEach(jobSnap => {
+      const j = jobSnap.data();
+
+      // Determine if it's a corporate job from path: "corporates/{company}/jobs/{jobId}" or main "jobs/{jobId}"
+      const pathParts = jobSnap.ref.path.split("/");
+      const company = pathParts[0] === "corporates" ? pathParts[1] : null;
+
+      // Count metrics
+      const st = j.status;
+      if (st === "pending") pending++;
+      else if (st === "in_progress") inprogress++;
+      else if (st === "completed") { completed++; revenue += Number(j.total || 0); }
+
+      quick.push({
+        id: jobSnap.id,
+        plate: j.plate || "—",
+        status: st || "pending",
+        total: j.total || 0,
+        createdAt: j.createdAt || null,
+        assignedTo: j.assignedTo || null,
+        company
+      });
+    });
+
+    // Update overview metrics
+    if (pendingCountEl) pendingCountEl.textContent = pending;
+    if (inProgressCountEl) inProgressCountEl.textContent = inprogress;
+    if (completedCountEl) completedCountEl.textContent = completed;
+    if (revenueSumEl) revenueSumEl.textContent = formatCurrency(revenue);
+
+    if (activeStaffEl) {
+      const assignedSet = new Set(quick.filter(j => j.assignedTo).map(j => j.assignedTo));
+      activeStaffEl.textContent = assignedSet.size || "0";
     }
 
-    quick.push({
-      id: docSnap.id,
-      plate: d.plate,
-      status: st,
-      total: d.total || 0,
-      createdAt: d.createdAt || null,
-      assignedTo: d.assignedTo || null
-    });
-  });
+    // Render latest 8 quick jobs
+    if (quickJobsListEl) {
+      quickJobsListEl.innerHTML = quick
+        .sort((a, b) => b.createdAt?.toMillis() - a.createdAt?.toMillis())
+        .slice(0, 8)
+        .map(j => `
+          <div class="quick-card">
+            <div class="quick-header">
+              <span class="quick-plate">${j.plate || "—"}</span>
+              <span class="quick-status ${j.status}">${(j.status || "—").replace("_"," ")}</span>
+            </div>
+            <div class="quick-body">
+              <div class="quick-total">${formatCurrency(j.total)}</div>
+              <div class="quick-time">${j.createdAt ? formatDate(j.createdAt) : ""}</div>
+              <div class="quick-company">${j.company || "Main"}</div>
+            </div>
+          </div>
+        `).join("");
+    }
 
-  if (pendingCountEl) pendingCountEl.textContent = pending;
-  if (inProgressCountEl) inProgressCountEl.textContent = inprogress;
-  if (completedCountEl) completedCountEl.textContent = completed;
-  if (revenueSumEl) revenueSumEl.textContent = formatCurrency(revenue);
-
-  if (activeStaffEl) {
-    const assignedSet = new Set(quick.filter(j => j.assignedTo).map(j => j.assignedTo));
-    activeStaffEl.textContent = assignedSet.size || "0";
+  } catch (err) {
+    console.error("Overview listener error:", err);
+    toast("Failed to load overview (permissions?)");
+  } finally {
+    hideLoader();
+    console.log("Overview listener update complete.");
   }
-
-  if (quickJobsListEl) {
-    quickJobsListEl.innerHTML = quick.slice(0, 8).map(j => `
-      <div class="quick-item">
-        <div class="plate">${j.plate || "—"}</div>
-        <div class="meta">${(j.status||"—").replace("_"," ")} • ${formatCurrency(j.total)}</div>
-        <div class="time">${j.createdAt ? formatDate(j.createdAt) : ""}</div>
-      </div>
-    `).join("");
-  }
-
-  hideLoader();
-}, err => {
-  hideLoader();
-  console.error("Overview listener error", err);
-  toast("Failed to load overview (permissions?)");
-});
-
 }
 
+
+
+
 /* ------------------------- jobs listener & render ------------------------- */
-function startJobsListener({ status = "all", search = "", dateRange = "all" } = {}) {
+async function startJobsListener({ status = "all", search = "", dateRange = "all" } = {}) {
   if (unsubJobs) unsubJobs();
   showLoader();
 
-  const jobsRef = collection(db, "jobs");
   const rangeStart = startOfRange(dateRange);
 
-  const clauses = [];
-  if (status && status !== "all") clauses.push(where("status", "==", status));
-  if (rangeStart) clauses.push(where("createdAt", ">=", rangeStart));
+  try {
+    // Collection group query: all "jobs" subcollections (includes corporate jobs)
+    const jobsGroupRef = collectionGroup(db, "jobs");
+    const clauses = [];
+    if (status && status !== "all") clauses.push(where("status", "==", status));
+    if (rangeStart) clauses.push(where("createdAt", ">=", rangeStart));
 
-  let qJobs;
-  if (clauses.length) qJobs = query(jobsRef, ...clauses, orderBy("createdAt", "desc"));
-  else qJobs = query(jobsRef, orderBy("createdAt", "desc"));
+    const qJobs = clauses.length
+      ? query(jobsGroupRef, ...clauses, orderBy("createdAt", "desc"))
+      : query(jobsGroupRef, orderBy("createdAt", "desc"));
 
-  unsubJobs = onSnapshot(qJobs, snap => {
-    const rows = [];
-    snap.forEach(snapDoc => rows.push({ id: snapDoc.id, ...snapDoc.data() }));
+    const jobsSnap = await getDocs(qJobs);
+    console.log("Jobs found (collection group):", jobsSnap.size);
 
+    const rows = jobsSnap.docs.map(jobSnap => {
+      const pathParts = jobSnap.ref.path.split("/");
+      // If job is under "corporates/{company}/jobs", extract company
+      const company = pathParts[0] === "corporates" ? pathParts[1] : null;
+      return { id: jobSnap.id, company, ...jobSnap.data() };
+    });
+
+    // Filter by search term
     const filtered = rows.filter(r => {
       if (!search) return true;
       const q = search.toLowerCase();
-      return (r.plate && r.plate.toLowerCase().includes(q)) || (r.id && r.id.toLowerCase().includes(q));
+      return (r.plate && r.plate.toLowerCase().includes(q)) ||
+             (r.id && r.id.toLowerCase().includes(q)) ||
+             (r.company && r.company.toLowerCase().includes(q));
     });
 
     renderJobsTable(filtered);
-    hideLoader();
-  }, err => {
-    console.error("Jobs listener error", err);
+  } catch (err) {
+    console.error("Jobs listener error:", err);
     toast("Failed to load jobs (permissions?)");
+  } finally {
     hideLoader();
-  });
+  }
 }
 
 function renderJobsTable(rows = []) {
   if (!jobsTableBody) return;
   if (!rows.length) {
-    jobsTableBody.innerHTML = `<tr><td colspan="7" class="muted">No jobs found</td></tr>`;
+    jobsTableBody.innerHTML = `<tr><td colspan="8" class="muted">No jobs found</td></tr>`;
     return;
   }
 
@@ -207,124 +257,204 @@ function renderJobsTable(rows = []) {
     const statusLabel = r.status ? r.status.replace("_", " ") : "—";
     const total = formatCurrency(r.total || 0);
     const created = r.createdAt ? formatDate(r.createdAt) : "—";
+    const company = r.company || null;
 
     return `
-      <tr data-id="${r.id}">
+      <tr data-id="${r.id}" data-company="${company || ""}">
         <td>${r.id}</td>
         <td>${r.plate || "—"}</td>
         <td>${r.model || "—"}</td>
         <td>${assigned}</td>
         <td>${statusLabel}</td>
         <td>${total}</td>
+        <td>${company || "Main"}</td>
         <td>
-          ${r.status === "pending" ? `<button class="btn small start-btn" data-id="${r.id}">Start</button>` : ""}
-          ${r.status === "in_progress" ? `<button class="btn small complete-btn" data-id="${r.id}">Complete</button>` : ""}
-          <button class="btn small details-btn" data-id="${r.id}">Details</button>
-          <button class="btn small danger delete-btn" data-id="${r.id}">Delete</button>
+          ${r.status === "pending" ? `<button class="btn small start-btn" data-id="${r.id}" data-company="${company || ""}">Start</button>` : ""}
+          ${r.status === "in_progress" ? `<button class="btn small complete-btn" data-id="${r.id}" data-company="${company || ""}">Complete</button>` : ""}
+          <button class="btn small details-btn" data-id="${r.id}" data-company="${company || ""}">Details</button>
+          <button class="btn small danger delete-btn" data-id="${r.id}" data-company="${company || ""}">Delete</button>
         </td>
       </tr>
     `;
   }).join("");
 
+  // Helper to get correct doc reference
+  const getJobRef = (id, company) => {
+    return company
+      ? doc(db, "corporates", company, "jobs", id) // corporate job
+      : doc(db, "jobs", id);                     // main job
+  };
+
   // Wire actions
-  jobsTableBody.querySelectorAll(".start-btn").forEach(b => b.onclick = async (e) => {
+  jobsTableBody.querySelectorAll(".start-btn").forEach(b => b.onclick = async e => {
     const id = e.target.dataset.id;
+    const company = e.target.dataset.company || null;
     try {
-      await updateDoc(doc(db, "jobs", id), { status: "in_progress", startedAt: serverTimestamp() });
+      await updateDoc(getJobRef(id, company), { status: "in_progress", startedAt: serverTimestamp() });
       toast("Job started");
-    } catch (err) {
-      console.error(err);
-      toast("Failed to start job");
-    }
+    } catch (err) { console.error(err); toast("Failed to start job"); }
   });
 
-  jobsTableBody.querySelectorAll(".complete-btn").forEach(b => b.onclick = async (e) => {
+  jobsTableBody.querySelectorAll(".complete-btn").forEach(b => b.onclick = async e => {
     const id = e.target.dataset.id;
+    const company = e.target.dataset.company || null;
     try {
-      await updateDoc(doc(db, "jobs", id), { status: "completed", completedAt: serverTimestamp() });
+      await updateDoc(getJobRef(id, company), { status: "completed", completedAt: serverTimestamp() });
       toast("Job marked completed");
-    } catch (err) {
-      console.error(err);
-      toast("Failed to complete job");
-    }
+    } catch (err) { console.error(err); toast("Failed to complete job"); }
   });
 
-  jobsTableBody.querySelectorAll(".delete-btn").forEach(b => b.onclick = async (e) => {
+  jobsTableBody.querySelectorAll(".delete-btn").forEach(b => b.onclick = async e => {
     const id = e.target.dataset.id;
+    const company = e.target.dataset.company || null;
     if (!confirm("Delete this job? This cannot be undone.")) return;
     try {
-      await deleteDoc(doc(db, "jobs", id));
+      await deleteDoc(getJobRef(id, company));
       toast("Job deleted");
-    } catch (err) {
-      console.error(err);
-      toast("Failed to delete job");
-    }
+    } catch (err) { console.error(err); toast("Failed to delete job"); }
   });
 
-  jobsTableBody.querySelectorAll(".details-btn").forEach(b => b.onclick = (e) => {
+  jobsTableBody.querySelectorAll(".details-btn").forEach(b => b.onclick = e => {
     const id = e.target.dataset.id;
-    const ev = new CustomEvent("niapay:openJob", { detail: { id } });
-    window.dispatchEvent(ev);
+    const company = e.target.dataset.company || null;
+    openJobModal(id, company); // Pass company if modal needs to fetch corporate job
   });
 }
 
-/* ------------------------- staff listener & rendering ------------------------- */
-function startStaffListener(dateRange = "all") {
-  if (unsubStaff) unsubStaff();
 
-  const usersRef = collection(db, "users"); // ensure users collection exists
+
+async function openJobModal(jobId) {
+  const modal = document.getElementById("jobModal");
+  const modalBody = document.getElementById("modalBody");
+
+  modal.classList.remove("hidden");
+  modalBody.innerHTML = "Loading...";
+
+  try {
+    const snap = await getDoc(doc(db, "jobs", jobId));
+    if (!snap.exists()) {
+      modalBody.innerHTML = "Job not found.";
+      return;
+    }
+
+    const d = snap.data();
+
+    modalBody.innerHTML = `
+      <div class="modal-row"><strong>Plate:</strong> ${d.plate}</div>
+      <div class="modal-row"><strong>Model:</strong> ${d.model}</div>
+      <div class="modal-row"><strong>Status:</strong> ${d.status.replace("_", " ")}</div>
+      <div class="modal-row"><strong>Total:</strong> ${formatCurrency(d.total)}</div>
+      <div class="modal-row"><strong>Assigned To:</strong> ${d.assignedTo || "—"}</div>
+      <div class="modal-row"><strong>Created:</strong> ${d.createdAt ? formatDate(d.createdAt) : "—"}</div>
+    `;
+  } catch (err) {
+    modalBody.innerHTML = "Error loading job details.";
+    console.error(err);
+  }
+}
+
+document.getElementById("closeJobModal").onclick = () =>
+  document.getElementById("jobModal").classList.add("hidden");
+
+window.onclick = function (e) {
+  const modal = document.getElementById("jobModal");
+  if (e.target === modal) modal.classList.add("hidden");
+};
+
+
+
+/* ------------------------- simplified staff listener & rendering (with collection group) ------------------------- */
+async function startStaffListener(dateRange = "month") {
+  if (typeof unsubStaff === "function") unsubStaff();
+
+  console.log("Starting staff listener for range:", dateRange);
+
   const rangeStart = startOfRange(dateRange);
+  console.log("Range start timestamp:", rangeStart?.toDate());
 
-  // simple query for staff
-  const q = query(usersRef, where("role", "==", "staff"), orderBy("displayName", "asc"));
+  try {
+    // Collection group query for all completed jobs (main + corporate)
+    const jobsRef = collectionGroup(db, "jobs");
 
-  unsubStaff = onSnapshot(q, async (snap) => {
-    const staffDocs = [];
-    for (const s of snap.docs) staffDocs.push({ id: s.id, ...s.data() });
+    const clauses = [where("status", "==", "completed")];
+    if (rangeStart) clauses.push(where("createdAt", ">=", rangeStart));
 
-    const staffWithMetrics = await Promise.all(staffDocs.map(async staff => {
-      const jobsRef = collection(db, "jobs");
-      const clauses = [where("assignedTo", "==", staff.uid || staff.id)];
-      if (rangeStart) clauses.push(where("createdAt", ">=", rangeStart));
-      const qJobs = query(jobsRef, ...clauses);
-      const jobsSnap = await getDocs(qJobs);
-      const jobsArr = [];
-      jobsSnap.forEach(d => jobsArr.push({ id: d.id, ...d.data() }));
+    const qJobs = query(jobsRef, ...clauses, orderBy("createdAt"), orderBy("assignedTo"));
 
-      const totalCars = jobsArr.length;
-      const timeSpent = jobsArr.reduce((acc, j) => acc + (j.timeMinutes || 0), 0);
-      return { ...staff, totalCars, timeSpent, jobs: jobsArr };
-    }));
+    const jobsSnap = await getDocs(qJobs);
+    console.log("Completed jobs snapshot received:", jobsSnap.size, "docs");
+
+    if (!jobsSnap.size) {
+      console.warn("No completed jobs found.");
+      staffGridEl.innerHTML = `<div class="muted">No staff jobs found</div>`;
+      return;
+    }
+
+    // Aggregate jobs by staff
+    const staffMap = {};
+    jobsSnap.forEach(docSnap => {
+      const job = docSnap.data();
+      const staffName = job.assignedTo || "Unassigned";
+
+      if (!staffMap[staffName]) staffMap[staffName] = { totalRevenue: 0, totalCars: 0 };
+
+      staffMap[staffName].totalRevenue += Number(job.total || 0);
+      staffMap[staffName].totalCars += 1;
+    });
+
+    // Build simplified staff array
+    const staffWithMetrics = Object.keys(staffMap).map(name => {
+      const totalRevenue = staffMap[name].totalRevenue;
+      const totalCars = staffMap[name].totalCars;
+      const commission = totalRevenue * 0.1;
+
+      return { displayName: name, totalRevenue, totalCars, commission };
+    });
+
+    console.log("Staff metrics:", staffWithMetrics);
 
     renderStaffGrid(staffWithMetrics);
-  }, err => {
-    console.error("Staff listener err", err);
+
+  } catch (err) {
+    console.error("Staff listener error:", err);
     toast("Failed to load staff");
-  });
+  }
 }
+
 
 function renderStaffGrid(staff = []) {
   if (!staffGridEl) return;
+
   if (!staff.length) {
+    console.warn("renderStaffGrid: No staff to render");
     staffGridEl.innerHTML = `<div class="muted">No staff found</div>`;
     return;
   }
+
+  console.log("Rendering staff grid with", staff.length, "staff members");
 
   staffGridEl.innerHTML = staff.map(s => `
     <div class="staff-card">
       <div class="top">
         <div class="avatar">${s.displayName ? s.displayName[0].toUpperCase() : "S"}</div>
         <div class="info">
-          <div class="name">${s.displayName || s.email || s.id}</div>
-          <div class="meta">Cars: ${s.totalCars} • Time: ${s.timeSpent} min</div>
+          <div class="name">${s.displayName}</div>
+          <div class="meta">
+            Jobs this month: ${s.totalCars} • 
+            Revenue: ${formatCurrency(s.totalRevenue)} • 
+            Commission: ${formatCurrency(s.commission)}
+          </div>
         </div>
-      </div>
-      <div class="jobs-list">
-        ${s.jobs.slice(0,5).map(j => `<div class="job-small">${j.plate || j.id} • ${j.status}</div>`).join("")}
       </div>
     </div>
   `).join("");
 }
+
+// Start the listener
+startStaffListener();
+
+
+
 
 /* ------------------------- activity listener ------------------------- */
 function startActivityListener(dateRange = "all") {
@@ -357,19 +487,36 @@ function startActivityListener(dateRange = "all") {
 async function generateCashReport(dateRange = "all") {
   showLoader();
   try {
-    const jobsRef = collection(db, "jobs");
     const rangeStart = startOfRange(dateRange);
+
+    // Use collection group to fetch all "jobs" subcollections, including corporate jobs
+    const jobsRef = collectionGroup(db, "jobs");
 
     const clauses = [where("status", "==", "completed")];
     if (rangeStart) clauses.push(where("createdAt", ">=", rangeStart));
+
     const q = query(jobsRef, ...clauses, orderBy("createdAt", "desc"));
 
     const snap = await getDocs(q);
     const items = [];
     let total = 0;
+
     snap.forEach(s => {
       const d = s.data();
-      items.push({ id: s.id, plate: d.plate, total: d.total || 0, date: d.createdAt || null, assignedTo: d.assignedTo || null });
+
+      // Determine company if corporate job
+      const pathParts = s.ref.path.split("/"); // e.g., corporates/{company}/jobs/{jobId}
+      const company = pathParts[1] && pathParts[0] === "corporates" ? pathParts[1] : null;
+
+      items.push({
+        id: s.id,
+        plate: d.plate,
+        total: d.total || 0,
+        date: d.createdAt || null,
+        assignedTo: d.assignedTo || null,
+        company
+      });
+
       total += Number(d.total || 0);
     });
 
@@ -380,7 +527,10 @@ async function generateCashReport(dateRange = "all") {
           <div>Total revenue: ${formatCurrency(total)}</div>
         </div>
         <div class="report-items">
-          ${items.map(it => `<div class="report-row">${formatDate(it.date)} • ${it.plate || "—"} • ${formatCurrency(it.total)} • ${it.assignedTo || "—"}</div>`).join("")}
+          ${items.map(it => `
+            <div class="report-row">
+              ${formatDate(it.date)} • ${it.plate || "—"} • ${formatCurrency(it.total)} • ${it.assignedTo || "—"} ${it.company ? `• ${it.company}` : ""}
+            </div>`).join("")}
         </div>
       `;
     }
@@ -394,6 +544,127 @@ async function generateCashReport(dateRange = "all") {
     return { items: [], total: 0 };
   }
 }
+
+
+// Firestore references
+const staffRef = collection(db, "staff");
+const servicesRef = collection(db, "services");
+const companiesRef = collection(db, "companies");
+
+// ---------- STAFF ----------
+const staffListEl = document.getElementById("staffList");
+document.getElementById("addStaffBtn").onclick = async () => {
+  const first = document.getElementById("staffFirstName").value.trim();
+  const last = document.getElementById("staffLastName").value.trim();
+  if (!first || !last) return toast("Enter first and last name");
+  
+  try {
+    await addDoc(staffRef, { firstName: first, lastName: last, createdAt: serverTimestamp() });
+    document.getElementById("staffFirstName").value = "";
+    document.getElementById("staffLastName").value = "";
+    toast("Staff added");
+  } catch (err) {
+    console.error(err); toast("Failed to add staff");
+  }
+};
+
+// ---------- SERVICES ----------
+const servicesListEl = document.getElementById("servicesList");
+document.getElementById("addServiceBtn").onclick = async () => {
+  const name = document.getElementById("serviceName").value.trim();
+  const price = parseFloat(document.getElementById("servicePrice").value);
+  if (!name || isNaN(price)) return toast("Enter valid service name and price");
+  
+  try {
+    await addDoc(servicesRef, { name, price, createdAt: serverTimestamp() });
+    document.getElementById("serviceName").value = "";
+    document.getElementById("servicePrice").value = "";
+    toast("Service added");
+  } catch (err) {
+    console.error(err); toast("Failed to add service");
+  }
+};
+
+// ---------- COMPANIES ----------
+const companiesListEl = document.getElementById("companiesList");
+document.getElementById("addCompanyBtn").onclick = async () => {
+  const name = document.getElementById("companyName").value.trim();
+  if (!name) return toast("Enter company name");
+
+  try {
+    await addDoc(companiesRef, { name, createdAt: serverTimestamp() });
+    document.getElementById("companyName").value = "";
+    toast("Company added");
+  } catch (err) {
+    console.error(err); toast("Failed to add company");
+  }
+};
+
+// ---------- REALTIME LISTENERS ----------
+function renderAdminList(snap, listEl, type) {
+  if (!snap.size) {
+    listEl.innerHTML = `<li class="muted">No ${type} found</li>`;
+    return;
+  }
+
+  listEl.innerHTML = snap.docs.map(docSnap => {
+    const data = docSnap.data();
+    const displayName = type === "staff" ? `${data.firstName} ${data.lastName}` :
+                        type === "services" ? `${data.name} - Ksh ${data.price}` :
+                        data.name;
+    return `
+      <li data-id="${docSnap.id}">
+        <span>${displayName}</span>
+        <button class="edit-btn">Edit</button>
+        <button class="delete-btn">Delete</button>
+      </li>
+    `;
+  }).join("");
+
+  // Attach edit/delete events
+  listEl.querySelectorAll(".edit-btn").forEach(btn => {
+    btn.onclick = async e => {
+      const id = e.target.parentElement.dataset.id;
+      const docRef = doc(db, type === "staff" ? "staff" : type === "services" ? "services" : "companies", id);
+      const current = snap.docs.find(d => d.id === id).data();
+
+      if (type === "staff") {
+        const newFirst = prompt("First Name:", current.firstName);
+        const newLast = prompt("Last Name:", current.lastName);
+        if (!newFirst || !newLast) return;
+        await updateDoc(docRef, { firstName: newFirst, lastName: newLast });
+      } else if (type === "services") {
+        const newName = prompt("Service Name:", current.name);
+        const newPrice = parseFloat(prompt("Price (Ksh):", current.price));
+        if (!newName || isNaN(newPrice)) return;
+        await updateDoc(docRef, { name: newName, price: newPrice });
+      } else {
+        const newName = prompt("Company Name:", current.name);
+        if (!newName) return;
+        await updateDoc(docRef, { name: newName });
+      }
+      toast(`${type.charAt(0).toUpperCase() + type.slice(1)} updated`);
+    };
+  });
+
+  listEl.querySelectorAll(".delete-btn").forEach(btn => {
+    btn.onclick = async e => {
+      if (!confirm("Are you sure?")) return;
+      const id = e.target.parentElement.dataset.id;
+      const docRef = doc(db, type === "staff" ? "staff" : type === "services" ? "services" : "companies", id);
+      await deleteDoc(docRef);
+      toast(`${type.charAt(0).toUpperCase() + type.slice(1)} deleted`);
+    };
+  });
+}
+
+// Staff realtime listener
+onSnapshot(staffRef, snap => renderAdminList(snap, staffListEl, "staff"));
+// Services realtime listener
+onSnapshot(servicesRef, snap => renderAdminList(snap, servicesListEl, "services"));
+// Companies realtime listener
+onSnapshot(companiesRef, snap => renderAdminList(snap, companiesListEl, "companies"));
+
 
 /* ------------------------- admin helpers ------------------------- */
 async function assignJobTo(jobId, staffId) {
