@@ -166,6 +166,9 @@ html {
   #car-wrap{width:120px}
 }
 
+.cta-btn{
+  cursor: pointer;
+}
 /* Accessibility focus outlines */
 a:focus, button:focus{outline:3px solid rgba(184,147,96,0.25); outline-offset:3px}
 .footer {

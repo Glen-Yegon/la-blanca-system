@@ -363,6 +363,20 @@ window.onclick = function (e) {
 
 
 
+// Load global commission rate
+async function getCommissionRate() {
+  try {
+    const snap = await getDoc(doc(db, "commissions", "settings"));
+    if (snap.exists()) {
+      return Number(snap.data().rate) / 100; // convert 10 → 0.10
+    }
+  } catch (err) {
+    console.error("Failed to load commission:", err);
+  }
+  return 0.10; // fallback default 10%
+}
+
+
 /* ------------------------- simplified staff listener & rendering (with collection group) ------------------------- */
 async function startStaffListener(dateRange = "month") {
   if (typeof unsubStaff === "function") unsubStaff();
@@ -373,6 +387,10 @@ async function startStaffListener(dateRange = "month") {
   console.log("Range start timestamp:", rangeStart?.toDate());
 
   try {
+    // 🔥 Load commission rate ONCE
+    const commissionRate = await getCommissionRate();
+    console.log("Loaded commission rate:", commissionRate);
+
     // Collection group query for all completed jobs (main + corporate)
     const jobsRef = collectionGroup(db, "jobs");
 
@@ -402,11 +420,12 @@ async function startStaffListener(dateRange = "month") {
       staffMap[staffName].totalCars += 1;
     });
 
-    // Build simplified staff array
+    // Build simplified staff array using dynamic commission
     const staffWithMetrics = Object.keys(staffMap).map(name => {
       const totalRevenue = staffMap[name].totalRevenue;
       const totalCars = staffMap[name].totalCars;
-      const commission = totalRevenue * 0.1;
+
+      const commission = totalRevenue * commissionRate; // 🔥 dynamic
 
       return { displayName: name, totalRevenue, totalCars, commission };
     });
@@ -420,6 +439,7 @@ async function startStaffListener(dateRange = "month") {
     toast("Failed to load staff");
   }
 }
+
 
 
 function renderStaffGrid(staff = []) {
@@ -599,6 +619,53 @@ document.getElementById("addCompanyBtn").onclick = async () => {
     console.error(err); toast("Failed to add company");
   }
 };
+
+// ---------- COMMISSION SETTINGS ----------
+const commissionDocRef = doc(db, "commissions", "settings");
+
+const commissionRateEl = document.getElementById("commissionRate");
+const commissionStatusEl = document.getElementById("commissionStatus");
+const saveCommissionBtn = document.getElementById("saveCommissionBtn");
+
+// Load existing commission on page startup
+async function loadCommission() {
+  try {
+    const snap = await getDoc(commissionDocRef);
+
+    if (snap.exists()) {
+      const data = snap.data();
+      commissionRateEl.value = data.rate;
+      commissionStatusEl.textContent = `Current commission: ${data.rate}%`;
+    } else {
+      commissionStatusEl.textContent = "No commission set yet.";
+    }
+  } catch (err) {
+    console.error(err);
+    toast("Failed to load commission");
+  }
+}
+
+loadCommission();
+
+// Save or update commission
+saveCommissionBtn.onclick = async () => {
+  const rate = parseFloat(commissionRateEl.value);
+
+  if (isNaN(rate) || rate < 0) return toast("Enter valid commission");
+
+  try {
+    await setDoc(commissionDocRef, {
+      rate,
+      updatedAt: serverTimestamp()
+    });
+    commissionStatusEl.textContent = `Current commission: ${rate}%`;
+    toast("Commission saved");
+  } catch (err) {
+    console.error(err);
+    toast("Failed to save commission");
+  }
+};
+
 
 // ---------- REALTIME LISTENERS ----------
 function renderAdminList(snap, listEl, type) {
