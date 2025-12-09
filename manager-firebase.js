@@ -45,13 +45,27 @@ const cashReportListEl = document.getElementById("cashReportList");
 const usersListEl = document.getElementById("usersList");
 const activityLogEl = document.getElementById("activityLog");
 
-const dateFilterSelect = document.getElementById("dateFilter");
-const applyFilterBtn = document.getElementById("applyFilterBtn");
+
 
 let unsubOverview = null;
 let unsubJobs = null;
 let unsubStaff = null;
 let unsubActivity = null;
+
+/* ------------------------- global date range store ------------------------- */
+let globalStartTs = null;
+let globalEndTs = null;
+
+function setGlobalDateRange(startTs, endTs) {
+  console.log("[GLOBAL] Setting global date range:", { startTs, endTs });
+  globalStartTs = startTs;
+  globalEndTs = endTs;
+}
+
+function getGlobalDateRange() {
+  console.log("[GLOBAL] Getting global date range:", { start: globalStartTs, end: globalEndTs });
+  return { start: globalStartTs, end: globalEndTs };
+}
 
 /* ------------------------- small UI helpers ------------------------- */
 function showLoader() { if (loader) loader.style.display = "flex"; }
@@ -72,6 +86,95 @@ function formatDate(ts) {
   if (!ts) return "—";
   const d = ts.toDate ? ts.toDate() : new Date(ts);
   return d.toLocaleString();
+}
+
+const startDateInput = document.getElementById("startDate");
+const endDateInput = document.getElementById("endDate");
+const applyDateRangeBtn = document.getElementById("applyDateRangeBtn");
+
+/* ------------------------- Date filter apply ------------------------- */
+applyDateRangeBtn.addEventListener("click", () => {
+  console.log("[DATE-FILTER] APPLY CLICKED");
+
+  const start = startDateInput.value ? new Date(startDateInput.value) : null;
+  const end = endDateInput.value ? new Date(endDateInput.value) : null;
+
+  if (!start || !end) {
+    toast("Select both start and end dates");
+    return;
+  }
+
+  end.setHours(23, 59, 59); // include whole end day
+
+  const startTs = Timestamp.fromDate(start);
+  const endTs   = Timestamp.fromDate(end);
+
+  setGlobalDateRange(startTs, endTs);
+
+  console.log("[DATE-FILTER] Converted to Firestore Timestamp:", { startTs, endTs });
+
+  // 🔹 Load jobs table
+  loadJobsByDateRange(startTs, endTs);
+
+  // 🔹 Update overview with the same range
+  startOverviewListener(startTs, endTs);
+
+  toast("Date filter applied");
+});
+
+
+
+
+
+/* ------------------------- Load jobs by date range with logs ------------------------- */
+async function loadJobsByDateRange(startTs, endTs) {
+  console.log("[JOBS] loadJobsByDateRange STARTED", { startTs, endTs });
+
+  try {
+    showLoader();
+
+    let jobsRef = collectionGroup(db, "jobs");
+    let q = null;
+
+    if (startTs && endTs) {
+      console.log("[JOBS] Query: BETWEEN start & end");
+      q = query(jobsRef, where("createdAt", ">=", startTs), where("createdAt", "<=", endTs));
+
+    } else if (startTs && !endTs) {
+      console.log("[JOBS] Query: FROM start → infinity");
+      q = query(jobsRef, where("createdAt", ">=", startTs));
+
+    } else if (!startTs && endTs) {
+      console.log("[JOBS] Query: FROM -infinity → end");
+      q = query(jobsRef, where("createdAt", "<=", endTs));
+
+    } else {
+      console.log("[JOBS] No date filter applied! Returning...");
+      return;
+    }
+
+    console.log("[JOBS] Executing Firestore query:", q);
+
+    const snap = await getDocs(q);
+    console.log("[JOBS] Firestore returned docs:", snap.docs.length);
+
+    const jobs = snap.docs.map(d => {
+      const data = d.data();
+      console.log("[JOBS] Job:", { id: d.id, ...data });
+      return { id: d.id, ...data };
+    });
+
+    console.log("[JOBS] Final jobs array:", jobs);
+
+    renderJobsTable(jobs);
+    toast(`Loaded ${jobs.length} job(s) for selected date range.`);
+
+  } catch (e) {
+    console.error("[JOBS] Error loading date range:", e);
+    toast("Failed to load data.");
+  } finally {
+    hideLoader();
+  }
 }
 
 /* ------------------------- time range helpers ------------------------- */
@@ -101,9 +204,12 @@ function startOfRange(range) {
   }
 }
 
+
+
 /* ------------------------- overview listener (with collection group) ------------------------- */
-async function startOverviewListener(dateRange = "all") {
-  console.log("Starting overview listener for range:", dateRange);
+async function startOverviewListener(dateRangeOrStart = "all", endTs = null) {
+  console.log("Starting overview listener with:", { dateRangeOrStart, endTs });
+
 
   if (unsubOverview) {
     console.log("Unsubscribing previous overview listener");
@@ -112,15 +218,24 @@ async function startOverviewListener(dateRange = "all") {
 
   showLoader();
 
-  const rangeStart = startOfRange(dateRange);
-  console.log("Range start:", rangeStart);
+let rangeStart = null;
+
+if (typeof dateRangeOrStart === "string") {
+  rangeStart = startOfRange(dateRangeOrStart); // old behavior
+} else if (dateRangeOrStart && dateRangeOrStart.toDate) {
+  rangeStart = dateRangeOrStart; // Firestore Timestamp from calendar
+}
+
+console.log("Computed rangeStart:", rangeStart, "endTs:", endTs);
 
   try {
     // Collection group query: fetch all jobs, including corporate jobs
     const jobsRef = collectionGroup(db, "jobs");
 
-    const clauses = [];
-    if (rangeStart) clauses.push(where("createdAt", ">=", rangeStart));
+const clauses = [];
+if (rangeStart) clauses.push(where("createdAt", ">=", rangeStart));
+if (endTs) clauses.push(where("createdAt", "<=", endTs));
+
 
     const qAllJobs = clauses.length
       ? query(jobsRef, ...clauses, orderBy("createdAt", "desc"))
@@ -387,18 +502,22 @@ async function startStaffListener(dateRange = "month") {
   console.log("Range start timestamp:", rangeStart?.toDate());
 
   try {
-    // 🔥 Load commission rate ONCE
-    const commissionRate = await getCommissionRate();
-    console.log("Loaded commission rate:", commissionRate);
+    // 🔹 Load commission tiers from Firestore
+    const commissionSnap = await getDoc(doc(db, "commissions", "settings"));
+    let tiers = [];
+    if (commissionSnap.exists()) {
+      tiers = commissionSnap.data().tiers || [];
+      console.log("Loaded commission tiers:", tiers);
+    } else {
+      console.warn("No commission tiers found. Defaulting to 0%");
+    }
 
     // Collection group query for all completed jobs (main + corporate)
     const jobsRef = collectionGroup(db, "jobs");
-
     const clauses = [where("status", "==", "completed")];
     if (rangeStart) clauses.push(where("createdAt", ">=", rangeStart));
 
     const qJobs = query(jobsRef, ...clauses, orderBy("createdAt"), orderBy("assignedTo"));
-
     const jobsSnap = await getDocs(qJobs);
     console.log("Completed jobs snapshot received:", jobsSnap.size, "docs");
 
@@ -420,17 +539,27 @@ async function startStaffListener(dateRange = "month") {
       staffMap[staffName].totalCars += 1;
     });
 
-    // Build simplified staff array using dynamic commission
+    // Function to determine commission rate based on tiers
+    const getCommissionRate = (revenue) => {
+      if (!tiers.length) return 0; // fallback if no tiers
+      const tier = tiers.find(t => revenue >= t.min && revenue <= t.max);
+      return tier ? tier.rate : 0;
+    };
+
+    // Build simplified staff array using tiered commission
     const staffWithMetrics = Object.keys(staffMap).map(name => {
       const totalRevenue = staffMap[name].totalRevenue;
       const totalCars = staffMap[name].totalCars;
 
-      const commission = totalRevenue * commissionRate; // 🔥 dynamic
+      const commissionRate = getCommissionRate(totalRevenue);
+      const commission = totalRevenue * commissionRate;
+
+      console.log(`Staff: ${name}, Revenue: ${totalRevenue}, Rate: ${commissionRate}, Commission: ${commission}`);
 
       return { displayName: name, totalRevenue, totalCars, commission };
     });
 
-    console.log("Staff metrics:", staffWithMetrics);
+    console.log("Staff metrics with tiered commission:", staffWithMetrics);
 
     renderStaffGrid(staffWithMetrics);
 
@@ -441,33 +570,37 @@ async function startStaffListener(dateRange = "month") {
 }
 
 
-
 function renderStaffGrid(staff = []) {
   if (!staffGridEl) return;
 
   if (!staff.length) {
-    console.warn("renderStaffGrid: No staff to render");
     staffGridEl.innerHTML = `<div class="muted">No staff found</div>`;
     return;
   }
 
   console.log("Rendering staff grid with", staff.length, "staff members");
 
-  staffGridEl.innerHTML = staff.map(s => `
-    <div class="staff-card">
-      <div class="top">
-        <div class="avatar">${s.displayName ? s.displayName[0].toUpperCase() : "S"}</div>
-        <div class="info">
-          <div class="name">${s.displayName}</div>
-          <div class="meta">
-            Jobs this month: ${s.totalCars} • 
-            Revenue: ${formatCurrency(s.totalRevenue)} • 
-            Commission: ${formatCurrency(s.commission)}
-          </div>
-        </div>
-      </div>
+  // Column headers
+  const headers = `
+    <div class="staff-row staff-header">
+      <div class="col name">Name</div>
+      <div class="col jobs">Jobs Done</div>
+      <div class="col revenue">Revenue</div>
+      <div class="col commission">Commission</div>
+    </div>
+  `;
+
+  // Staff rows
+  const rows = staff.map(s => `
+    <div class="staff-row">
+      <div class="col name">${s.displayName}</div>
+      <div class="col jobs">${s.totalCars}</div>
+      <div class="col revenue">${formatCurrency(s.totalRevenue)}</div>
+      <div class="col commission">${formatCurrency(s.commission)}</div>
     </div>
   `).join("");
+
+  staffGridEl.innerHTML = headers + rows;
 }
 
 // Start the listener
@@ -619,28 +752,48 @@ document.getElementById("addCompanyBtn").onclick = async () => {
     console.error(err); toast("Failed to add company");
   }
 };
-
 // ---------- COMMISSION SETTINGS ----------
 const commissionDocRef = doc(db, "commissions", "settings");
-
-const commissionRateEl = document.getElementById("commissionRate");
 const commissionStatusEl = document.getElementById("commissionStatus");
 const saveCommissionBtn = document.getElementById("saveCommissionBtn");
 
+// Function to format and display tiers
+function displayTiers(tiers, title = "Commission Tiers") {
+  console.log("displayTiers called with tiers:", tiers, "title:", title);
+
+  if (!tiers || !tiers.length) {
+    console.log("No tiers provided or tiers empty");
+    commissionStatusEl.textContent = "No commission tiers set yet.";
+    return;
+  }
+
+  const formatted = tiers.map(t => {
+    if (t.max === Number.MAX_SAFE_INTEGER) return `${t.min.toLocaleString()}+ → ${t.rate * 100}%`;
+    return `${t.min.toLocaleString()}–${t.max.toLocaleString()} → ${t.rate * 100}%`;
+  }).join("<br>");
+
+  commissionStatusEl.innerHTML = `<strong>${title}:</strong><br>` + formatted;
+  console.log("Updated commissionStatusEl with formatted tiers");
+}
+
 // Load existing commission on page startup
 async function loadCommission() {
+  console.log("Loading commission from Firestore...");
   try {
     const snap = await getDoc(commissionDocRef);
+    console.log("Firestore snapshot received:", snap);
 
     if (snap.exists()) {
       const data = snap.data();
-      commissionRateEl.value = data.rate;
-      commissionStatusEl.textContent = `Current commission: ${data.rate}%`;
+      console.log("Commission document exists. Data:", data);
+
+      displayTiers(data.tiers, "Commission Tiers Loaded");
     } else {
-      commissionStatusEl.textContent = "No commission set yet.";
+      console.warn("Commission document does not exist");
+      displayTiers(null);
     }
   } catch (err) {
-    console.error(err);
+    console.error("Failed to load commission:", err);
     toast("Failed to load commission");
   }
 }
@@ -649,19 +802,28 @@ loadCommission();
 
 // Save or update commission
 saveCommissionBtn.onclick = async () => {
-  const rate = parseFloat(commissionRateEl.value);
-
-  if (isNaN(rate) || rate < 0) return toast("Enter valid commission");
+  console.log("Save commission button clicked");
 
   try {
+    const tiers = [
+      { min: 0, max: 24999, rate: 0.2 },
+      { min: 25000, max: 29999, rate: 0.25 },
+      { min: 30000, max: Number.MAX_SAFE_INTEGER, rate: 0.3 }
+    ];
+
+    console.log("Saving tiers to Firestore:", tiers);
+
     await setDoc(commissionDocRef, {
-      rate,
+      tiers,
       updatedAt: serverTimestamp()
     });
-    commissionStatusEl.textContent = `Current commission: ${rate}%`;
-    toast("Commission saved");
+
+    console.log("Tiers saved successfully to Firestore");
+
+    displayTiers(tiers, "Commission Tiers Saved");
+    toast("Commission tiers saved successfully");
   } catch (err) {
-    console.error(err);
+    console.error("Failed to save commission:", err);
     toast("Failed to save commission");
   }
 };
@@ -755,40 +917,62 @@ async function deleteJobById(jobId) {
 }
 
 /* ------------------------- wire UI (filters + events) ------------------------- */
+/* ------------------------- wire UI (filters + events) ------------------------- */
 function wireUI() {
-  if (applyFilterBtn && dateFilterSelect) {
-    applyFilterBtn.onclick = () => {
-      const range = dateFilterSelect.value || "all";
-      startOverviewListener(range);
-      startJobsListener({ status: filterStatusSelect ? filterStatusSelect.value : "all", search: searchInput ? searchInput.value : "", dateRange: range });
-      startStaffListener(range);
-      startActivityListener(range);
-      generateCashReport(range);
-      toast(`Applied filter: ${range}`);
+
+  // Status filter
+  if (filterStatusSelect) {
+    filterStatusSelect.onchange = () => {
+      console.log("[FILTER] Status changed:", filterStatusSelect.value);
+      console.log("[FILTER] Using global range:", { globalStartTs, globalEndTs });
+
+      startJobsListener({
+        status: filterStatusSelect.value,
+        search: searchInput ? searchInput.value : "",
+        start: globalStartTs,
+        end: globalEndTs
+      });
     };
   }
 
-  if (refreshJobsBtn) refreshJobsBtn.onclick = () => {
-    const range = dateFilterSelect ? dateFilterSelect.value : "all";
-    startJobsListener({ status: filterStatusSelect ? filterStatusSelect.value : "all", search: searchInput ? searchInput.value : "", dateRange: range });
-    toast("Jobs refreshed");
-  };
-
-  if (filterStatusSelect) filterStatusSelect.onchange = () => {
-    const range = dateFilterSelect ? dateFilterSelect.value : "all";
-    startJobsListener({ status: filterStatusSelect.value, search: searchInput ? searchInput.value : "", dateRange: range });
-  };
-
+  // Search filter
   if (searchInput) {
     let t;
     searchInput.oninput = () => {
       clearTimeout(t);
+
       t = setTimeout(() => {
-        const range = dateFilterSelect ? dateFilterSelect.value : "all";
-        startJobsListener({ status: filterStatusSelect ? filterStatusSelect.value : "all", search: searchInput.value, dateRange: range });
+        console.log("[FILTER] Search:", searchInput.value);
+        console.log("[FILTER] Using global range:", { globalStartTs, globalEndTs });
+
+        startJobsListener({
+          status: filterStatusSelect ? filterStatusSelect.value : "all",
+          search: searchInput.value,
+          start: globalStartTs,
+          end: globalEndTs
+        });
+
       }, 350);
     };
   }
+
+  // Refresh jobs
+  if (refreshJobsBtn) {
+    refreshJobsBtn.onclick = () => {
+      console.log("[FILTER] Refresh clicked");
+      console.log("[FILTER] Using global range:", { globalStartTs, globalEndTs });
+
+      startJobsListener({
+        status: filterStatusSelect ? filterStatusSelect.value : "all",
+        search: searchInput ? searchInput.value : "",
+        start: globalStartTs,
+        end: globalEndTs
+      });
+
+      toast("Jobs refreshed");
+    };
+  }
+
 
   // open job modal event from table — fetch doc and dispatch jobLoaded
   window.addEventListener("niapay:openJob", (e) => {

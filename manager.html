@@ -51,21 +51,27 @@
         </div>
       </header>
 
-      <!-- 🔹 FILTER SECTION -->
+     
+<!-- 🔹 FILTER SECTION (DATE RANGE CALENDAR) -->
 <section id="filterSection" class="filter-section">
-  <h2>Filter Jobs</h2>
+  <h2>Filter Jobs by Date</h2>
+
   <div class="filters">
-    <select id="dateFilter">
-      <option value="all">All Time</option>
-      <option value="today">Today</option>
-      <option value="week">Past Week</option>
-      <option value="month">Past Month</option>
-      <option value="3months">Past 3 Months</option>
-      <option value="year">Past Year</option>
-    </select>
-    <button id="applyFilterBtn" class="filter-btn">Apply Filter</button>
+
+    <div class="date-group">
+      <label>Start Date:</label>
+      <input type="date" id="startDate">
+    </div>
+
+    <div class="date-group">
+      <label>End Date:</label>
+      <input type="date" id="endDate">
+    </div>
+
+    <button id="applyDateRangeBtn" class="filter-btn">Apply Range</button>
   </div>
 </section>
+
 
 
       <section class="content">
@@ -230,17 +236,17 @@
     <ul id="companiesList" class="admin-list"></ul>
   </div>
 
-  <!-- COMMISSION SETTINGS -->
+<!-- COMMISSION SETTINGS -->
 <div class="admin-block" id="commissionBlock">
   <h4>Commission Settings</h4>
 
   <div class="admin-form">
-    <input type="number" id="commissionRate" placeholder="Commission Percentage (e.g. 10)" />
     <button id="saveCommissionBtn" class="btn primary">Save Commission</button>
   </div>
 
-  <p id="commissionStatus" class="muted">No commission set yet.</p>
+  <p id="commissionStatus" class="muted">No commission tiers set yet.</p>
 </div>
+
 
 </section>
 

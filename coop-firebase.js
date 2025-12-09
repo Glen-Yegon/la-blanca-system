@@ -82,34 +82,132 @@ cancelBtn.addEventListener("click", () => {
   addForm.setAttribute("aria-hidden", true);
 });
 
-services.forEach(btn => {
+/* -------------------------
+   Update Total
+   -------------------------*/
+function updateTotal() {
+  let total = 0;
+
+  selectedServices.forEach(s => {
+    total += s.price;
+  });
+
+  totalEl.textContent = `Kshs ${total}`;
+}
+
+
+/* -------------------------
+   Render Services
+   -------------------------*/
+async function renderServices() {
+  const servicesGrid = document.getElementById("servicesGrid");
+  if (!servicesGrid) return;
+
+  try {
+    const servicesRef = collection(db, "services");
+    const snap = await getDocs(servicesRef);
+
+    if (snap.empty) {
+      servicesGrid.innerHTML = `<div class="muted">No services available</div>`;
+      return;
+    }
+
+    // Generate buttons for each service
+    servicesGrid.innerHTML = snap.docs.map(docSnap => {
+      const s = docSnap.data();
+      const name = s.name || "Unnamed Service";
+      const price = s.price || 0;
+
+      return `
+        <button type="button" class="service" data-price="${price}" aria-pressed="false">
+          <div class="service-name">${name}</div>
+          <div class="service-price">Kshs ${price}</div>
+        </button>
+      `;
+    }).join("");
+
+    // After buttons are rendered, select them and attach click events
+    const serviceBtns = servicesGrid.querySelectorAll(".service");
+
+serviceBtns.forEach(btn => {
+  const price = Number(btn.dataset.price);
+  const name = btn.querySelector(".service-name").textContent.trim();
+
   btn.addEventListener("click", () => {
     const pressed = btn.getAttribute("aria-pressed") === "true";
     btn.setAttribute("aria-pressed", !pressed);
 
-    const price = Number(btn.dataset.price);
-    const name = btn.querySelector(".service-name").textContent.trim();
-    const key = JSON.stringify({ name, price });
-
-    if (!pressed) selectedServices.add(key);
-    else selectedServices.delete(key);
+    if (!pressed) {
+      // Add as object, not string
+      selectedServices.add({ name, price });
+    } else {
+      // Remove object from Set by name
+      selectedServices.forEach(s => {
+        if (s.name === name) selectedServices.delete(s);
+      });
+    }
 
     updateTotal();
   });
 });
 
-function updateTotal() {
-  let total = 0;
-  selectedServices.forEach(s => total += JSON.parse(s).price);
-  totalEl.textContent = `Kshs ${total}`;
+
+    // -------------------------
+    // Add "Other Service" button
+    // -------------------------
+    const otherBtn = document.createElement("button");
+    otherBtn.type = "button";
+    otherBtn.className = "service other-service";
+    otherBtn.setAttribute("aria-pressed", "false");
+    otherBtn.innerHTML = `
+      <div class="service-name">Other Service</div>
+      <div class="service-price">Kshs 0</div>
+    `;
+    servicesGrid.appendChild(otherBtn);
+
+otherBtn.addEventListener("click", () => {
+  const name = prompt("Enter the service name:");
+  if (!name) return;
+
+  const priceInput = prompt("Enter the service price (Kshs):");
+  const price = Number(priceInput);
+  if (isNaN(price) || price < 0) return alert("Invalid price");
+
+  // Add as object
+  selectedServices.add({ name, price });
+
+  // Update UI
+  otherBtn.querySelector(".service-name").textContent = name;
+  otherBtn.querySelector(".service-price").textContent = `Kshs ${price}`;
+  otherBtn.setAttribute("aria-pressed", "true");
+
+  updateTotal();
+
+  // Optional: reset button for next Other service
+  setTimeout(() => {
+    otherBtn.querySelector(".service-name").textContent = "Other Service";
+    otherBtn.querySelector(".service-price").textContent = "Kshs 0";
+    otherBtn.setAttribute("aria-pressed", "false");
+  }, 5000);
+});
+
+
+  } catch (err) {
+    console.error("Failed to load services:", err);
+    servicesGrid.innerHTML = `<div class="muted">Failed to load services</div>`;
+  }
 }
+
+// Call the function when the page loads or panel is opened
+renderServices();
+
+
 
 /* -------------------------
    CREATE JOB
    -------------------------*/
 const plateInput = document.getElementById("plate");
 const modelInput = document.getElementById("model");
-const colorInput = document.getElementById("color");
 
 const descriptionInput = document.getElementById("description");
 
@@ -118,35 +216,33 @@ customerForm.addEventListener("submit", async (e) => {
 
   const plate = plateInput.value.trim();
   const model = modelInput.value.trim();
-  const color = colorInput.value.trim();
   const description = descriptionInput.value.trim(); // <-- new
 
-  const servicesArr = [...selectedServices].map(s => JSON.parse(s));
+  // FIX: use objects directly
+  const servicesArr = [...selectedServices];
   const total = servicesArr.reduce((s, x) => s + x.price, 0);
 
   const status = "pending";
+  const company = companyInput.value;
 
-const company = companyInput.value;
-
-// Save inside corporate structure
-await addDoc(collection(db, "corporates", company, "jobs"), {
-  company,
-  plate,
-  model,
-  color,
-  description,
-  phone: "",
-  services: servicesArr,
-  total,
-  assignedTo: "",
-  status,
-  createdAt: serverTimestamp()
-});
-
+  // Save inside corporate structure
+  await addDoc(collection(db, "corporates", company, "jobs"), {
+    company,
+    plate,
+    model,
+    description,
+    phone: "",
+    services: servicesArr,
+    total,
+    assignedTo: "",
+    status,
+    createdAt: serverTimestamp()
+  });
 
   // Reset UI
   cancelBtn.click();
 });
+
 
 
 /* -------------------------
@@ -244,7 +340,6 @@ function openJobModal(id, data, ref) {
   r_plate.textContent = data.plate;
   r_company.textContent = data.company || "—";
   r_model.textContent = data.model;
-  r_color.textContent = data.color;
   r_description.textContent = data.description || "—"; // <-- new
   r_services.innerHTML = data.services.map(s => `<li>${s.name} — Kshs ${s.price}</li>`).join("");
 
@@ -372,44 +467,6 @@ function openCustomerFinalizeModal(id, data, ref) {
   };
 }
 
-
-
-
-async function renderServices() {
-  const servicesGrid = document.getElementById("servicesGrid");
-  if (!servicesGrid) return;
-
-  try {
-    const servicesRef = collection(db, "services");
-    const snap = await getDocs(servicesRef);
-
-    if (snap.empty) {
-      servicesGrid.innerHTML = `<div class="muted">No services available</div>`;
-      return;
-    }
-
-    // Generate buttons for each service
-    servicesGrid.innerHTML = snap.docs.map(docSnap => {
-      const s = docSnap.data();
-      const name = s.name || "Unnamed Service";
-      const price = s.price || 0;
-
-      return `
-        <button type="button" class="service" data-price="${price}" aria-pressed="false">
-          <div class="service-name">${name}</div>
-          <div class="service-price">Kshs ${price}</div>
-        </button>
-      `;
-    }).join("");
-
-  } catch (err) {
-    console.error("Failed to load services:", err);
-    servicesGrid.innerHTML = `<div class="muted">Failed to load services</div>`;
-  }
-}
-
-// Call the function when the page loads or panel is opened
-renderServices();
 
 
 
