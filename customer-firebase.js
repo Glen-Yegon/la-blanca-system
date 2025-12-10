@@ -402,29 +402,24 @@ confirmAssignBtn.onclick = async () => {
 };
 
 /* -------------------------
-   COMPLETE JOB → SAVE CUSTOMER + WHATSAPP
+   COMPLETE JOB → SEND PROMPT + CONFIRM PAYMENT + SAVE CUSTOMER + WHATSAPP
    -------------------------*/
 function openCustomerFinalizeModal(id, data) {
   currentJobId = id;
   openJobModal(id, data);
 
-  // ✅ Remove old form if it exists
+  // Remove old form if exists
   const oldForm = document.getElementById("finishForm");
   if (oldForm) oldForm.remove();
 
   const formHtml = `
-    <form id="finishForm" style="
-      margin-top: 18px;
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-    ">
+    <form id="finishForm" style="margin-top:18px; display:flex; flex-direction:column; gap:12px;">
       <input id="cust_name" type="text" placeholder="Customer name" required
-        style="padding: 10px; border-radius: 8px; border: 1px solid #ccc; font-size: 15px;">
-      <input id="cust_phone" type="tel" placeholder="+2547XXXXXXXX" required
-        style="padding: 10px; border-radius: 8px; border: 1px solid #ccc; font-size: 15px;">
-      <button class="btn primary" type="submit" style="padding: 10px; border-radius: 8px; font-weight: 600;">
-        Save & Send Receipt
+        style="padding:10px; border-radius:8px; border:1px solid #ccc; font-size:15px;">
+      <input id="cust_phone" type="tel" placeholder="2547XXXXXXXX" required
+        style="padding:10px; border-radius:8px; border:1px solid #ccc; font-size:15px;">
+      <button class="btn primary" type="submit" style="padding:10px; border-radius:8px; font-weight:600;">
+        Send Prompt
       </button>
     </form>
   `;
@@ -435,29 +430,90 @@ function openCustomerFinalizeModal(id, data) {
     e.preventDefault();
 
     const cname = cust_name.value.trim();
-    let cphone = cust_phone.value.replace(/\s+/g, "");
+    let cphone = cust_phone.value.replace(/\s+/g, "").replace(/\+/g, "");
+    if (cphone.startsWith("07")) cphone = "254" + cphone.slice(1);
 
-    await setDoc(doc(db, "customers", id), {
-      jobId: id,
-      customerName: cname,
-      phone: cphone,
-      carPlate: data.plate,
-      services: data.services,
-      total: data.total,
-      createdAt: serverTimestamp()
-    });
+    const amount = Number(data.total);
+    console.log("Total amount to send:", amount);
+    console.log("Type of amount:", typeof amount);
 
-    await updateDoc(doc(db, "jobs", id), { status: "completed" });
+    try {
+      // 1️⃣ Call backend to trigger STK Push
+      const response = await fetch("http://localhost:3000/stkpush", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          phone: cphone,
+          amount: amount,
+          accountReference: id,
+          customerName: cname
+        })
+      });
 
-    // ✅ Send the receipt to the *customer*
-    const waLink = `https://wa.me/${cphone.replace("+", "")}?text=${encodeURIComponent(
-      `NIAPAY RECEIPT\nPlate: ${data.plate}\nServices:\n${data.services.map(s => s.name + " - " + s.price).join("\n")}\nTotal: Kshs ${data.total}\n\nThank you for choosing NIAPAY Car Wash.`
-    )}`;
+      const result = await response.json();
 
-    window.open(waLink, "_blank");
-    closeModal();
+      if (!result.success) {
+        alert("Failed to send STK Push: " + result.message);
+        return;
+      }
+
+      const checkoutRequestId = result.checkoutRequestId;
+      alert("STK Push sent! Waiting for customer to complete payment...");
+
+      // 2️⃣ Poll backend for payment status
+      let paymentCompleted = false;
+      const pollInterval = 3000; // 3 seconds
+      const maxAttempts = 20;     // ~1 minute
+      let attempts = 0;
+
+      while (!paymentCompleted && attempts < maxAttempts) {
+        await new Promise(r => setTimeout(r, pollInterval));
+        attempts++;
+
+        const statusResponse = await fetch(`http://localhost:3000/payment-status/${checkoutRequestId}`);
+        const statusResult = await statusResponse.json();
+
+        console.log("Payment status check:", statusResult);
+
+        if (statusResult.success && statusResult.status === "completed") {
+          paymentCompleted = true;
+          break;
+        }
+      }
+
+      if (!paymentCompleted) {
+        alert("Payment not completed. Please try again.");
+        return;
+      }
+
+      // 3️⃣ Payment confirmed → Save to Firebase and send WhatsApp receipt
+      await setDoc(doc(db, "customers", id), {
+        jobId: id,
+        customerName: cname,
+        phone: cphone,
+        carPlate: data.plate,
+        services: data.services,
+        total: data.total,
+        createdAt: serverTimestamp()
+      });
+
+      await updateDoc(doc(db, "jobs", id), { status: "completed" });
+
+      const waLink = `https://wa.me/${cphone.replace("+", "")}?text=${encodeURIComponent(
+        `NIAPAY RECEIPT\nPlate: ${data.plate}\nServices:\n${data.services.map(s => s.name + " - " + s.price).join("\n")}\nTotal: Kshs ${data.total}\n\nThank you for choosing NIAPAY Car Wash.`
+      )}`;
+
+      window.open(waLink, "_blank");
+      closeModal();
+
+    } catch (err) {
+      console.error("Error during payment process:", err);
+      alert("An error occurred. Please try again.");
+    }
   };
 }
+
+
 
 
 
