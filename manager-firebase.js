@@ -178,31 +178,37 @@ async function loadJobsByDateRange(startTs, endTs) {
 }
 
 /* ------------------------- time range helpers ------------------------- */
+/*
 function startOfRange(range) {
   const now = new Date();
-  if (range === "today") {
-    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    return Timestamp.fromDate(start);
-  } else if (range === "week") {
+
+  if (range === "week") {
+    // Start of the current week (Monday)
+    const day = now.getDay(); // Sunday = 0
+    const diff = (day === 0 ? 6 : day - 1); // Monday = 0
     const start = new Date(now);
-    start.setDate(now.getDate() - 7);
-    return Timestamp.fromDate(start);
-  } else if (range === "month") {
-    const start = new Date(now);
-    start.setMonth(now.getMonth() - 1);
-    return Timestamp.fromDate(start);
-  } else if (range === "3months") {
-    const start = new Date(now);
-    start.setMonth(now.getMonth() - 3);
-    return Timestamp.fromDate(start);
-  } else if (range === "year") {
-    const start = new Date(now);
-    start.setFullYear(now.getFullYear() - 1);
-    return Timestamp.fromDate(start);
-  } else {
-    return null;
+    start.setDate(now.getDate() - diff);
+    start.setHours(0, 0, 0, 0);
+    return start;
   }
+
+  if (range === "month") {
+    // Start of current month
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    start.setHours(0, 0, 0, 0);
+    return start;
+  }
+
+  if (range === "year") {
+    const start = new Date(now.getFullYear(), 0, 1);
+    start.setHours(0, 0, 0, 0);
+    return start;
+  }
+
+  // Default: return null (no filtering)
+  return null;
 }
+*/
 
 
 
@@ -492,6 +498,39 @@ async function getCommissionRate() {
 }
 
 
+
+function startOfRange(range) {
+  const now = new Date();
+
+  if (range === "week") {
+    // Start of the current week (Monday)
+    const day = now.getDay(); // Sunday = 0
+    const diff = (day === 0 ? 6 : day - 1); // Monday = 0
+    const start = new Date(now);
+    start.setDate(now.getDate() - diff);
+    start.setHours(0, 0, 0, 0);
+    return start;
+  }
+
+  if (range === "month") {
+    // Start of current month
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    start.setHours(0, 0, 0, 0);
+    return start;
+  }
+
+  if (range === "year") {
+    const start = new Date(now.getFullYear(), 0, 1);
+    start.setHours(0, 0, 0, 0);
+    return start;
+  }
+
+  // Default: return null (no filtering)
+  return null;
+}
+
+
+
 /* ------------------------- simplified staff listener & rendering (with collection group) ------------------------- */
 async function startStaffListener(dateRange = "month") {
   if (typeof unsubStaff === "function") unsubStaff();
@@ -512,7 +551,15 @@ async function startStaffListener(dateRange = "month") {
       console.warn("No commission tiers found. Defaulting to 0%");
     }
 
-    // Collection group query for all completed jobs (main + corporate)
+    // 🔹 Only proceed if user is manager
+    const userSnap = await getDoc(doc(db, "accounts", auth.currentUser.uid));
+    const userRole = userSnap.data()?.role;
+    if (userRole !== "manager") {
+      console.warn("Current user is not a manager. Aborting staff listener.");
+      return;
+    }
+
+    // 🔹 Collection group query for all completed jobs (main + corporate)
     const jobsRef = collectionGroup(db, "jobs");
     const clauses = [where("status", "==", "completed")];
     if (rangeStart) clauses.push(where("createdAt", ">=", rangeStart));
@@ -534,7 +581,6 @@ async function startStaffListener(dateRange = "month") {
       const staffName = job.assignedTo || "Unassigned";
 
       if (!staffMap[staffName]) staffMap[staffName] = { totalRevenue: 0, totalCars: 0 };
-
       staffMap[staffName].totalRevenue += Number(job.total || 0);
       staffMap[staffName].totalCars += 1;
     });
@@ -550,12 +596,10 @@ async function startStaffListener(dateRange = "month") {
     const staffWithMetrics = Object.keys(staffMap).map(name => {
       const totalRevenue = staffMap[name].totalRevenue;
       const totalCars = staffMap[name].totalCars;
-
       const commissionRate = getCommissionRate(totalRevenue);
       const commission = totalRevenue * commissionRate;
 
       console.log(`Staff: ${name}, Revenue: ${totalRevenue}, Rate: ${commissionRate}, Commission: ${commission}`);
-
       return { displayName: name, totalRevenue, totalCars, commission };
     });
 
@@ -568,6 +612,7 @@ async function startStaffListener(dateRange = "month") {
     toast("Failed to load staff");
   }
 }
+
 
 
 function renderStaffGrid(staff = []) {
